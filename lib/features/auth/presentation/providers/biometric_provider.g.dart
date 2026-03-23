@@ -6,7 +6,7 @@ part of 'biometric_provider.dart';
 // RiverpodGenerator
 // **************************************************************************
 
-String _$biometricHash() => r'48392a576f6fb28d77b976ebc62c1d12db3a6d05';
+String _$biometricHash() => r'e8f7a2d6946921ef4bd9862c8e431a78a7219f1a';
 
 /// Gestiona el estado biométrico y el auto-bloqueo por inactividad.
 ///
