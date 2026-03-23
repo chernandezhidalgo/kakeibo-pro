@@ -3,6 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:kakeibo_pro/core/constants/app_colors.dart';
 import 'package:kakeibo_pro/core/constants/app_strings.dart';
+import 'package:kakeibo_pro/core/database/app_database.dart';
+import 'package:kakeibo_pro/core/database/database_provider.dart';
+import 'package:kakeibo_pro/core/sync/connectivity_listener.dart';
+import 'package:kakeibo_pro/core/sync/sync_worker.dart';
 import 'package:kakeibo_pro/features/auth/domain/entities/family.dart' show KakeiboFamily;
 import 'package:kakeibo_pro/features/auth/presentation/pages/invite_member_page.dart';
 import 'package:kakeibo_pro/features/auth/presentation/pages/login_page.dart';
@@ -15,14 +19,32 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Supabase lee las variables inyectadas en tiempo de compilación:
-  // flutter run --dart-define=SUPABASE_URL=... --dart-define=SUPABASE_ANON_KEY=...
+  // 1. Supabase — lee variables inyectadas en tiempo de compilación:
+  //    flutter run --dart-define=SUPABASE_URL=... --dart-define=SUPABASE_ANON_KEY=...
   await Supabase.initialize(
     url: const String.fromEnvironment('SUPABASE_URL'),
     anonKey: const String.fromEnvironment('SUPABASE_ANON_KEY'),
   );
 
-  runApp(const ProviderScope(child: KakeiboApp()));
+  // 2. Base de datos local Drift
+  final database = await AppDatabase.open();
+
+  // 3. WorkManager — sincronización en background (solo Android)
+  await SyncWorkerSetup.initialize();
+  await SyncWorkerSetup.registerPeriodicSync();
+
+  // 4. Listener de reconexión — dispara sync inmediato al recuperar red
+  ConnectivityListener.start();
+
+  runApp(
+    ProviderScope(
+      overrides: [
+        // Inyectar la instancia real de la DB para todos los providers
+        appDatabaseProvider.overrideWithValue(database),
+      ],
+      child: const KakeiboApp(),
+    ),
+  );
 }
 
 // ── App raíz ──────────────────────────────────────────────────────────────────
@@ -211,7 +233,7 @@ class _RouterNotifier extends ChangeNotifier {
 
 // ── Placeholder del Dashboard ─────────────────────────────────────────────────
 
-/// Pantalla vacía que ocupará el dashboard mientras se implementa F1-S4.
+/// Pantalla vacía que ocupará el dashboard mientras se implementa F1-S5.
 class _DashboardPlaceholder extends ConsumerWidget {
   const _DashboardPlaceholder();
 
@@ -239,7 +261,7 @@ class _DashboardPlaceholder extends ConsumerWidget {
       ),
       body: const Center(
         child: Text(
-          'Dashboard — próximamente (F1-S4)',
+          'Dashboard — próximamente (F1-S5)',
           style: TextStyle(color: AppColors.textMuted),
         ),
       ),

@@ -1,4 +1,4 @@
-﻿name: kakeibo_pro
+name: kakeibo_pro
 description: KakeiboPro — App de finanzas familiares para la familia Hernandez-Romero
 publish_to: 'none'
 version: 0.1.0+1
@@ -18,18 +18,23 @@ dependencies:
   go_router: ^14.6.2
 
   # Base de datos local
-  drift: ^2.21.0
+  drift: ^2.22.1
   drift_flutter: ^0.2.4
-  sqlite3_flutter_libs: ^0.5.28
+  # SQLCipher reemplaza sqlite3_flutter_libs para encriptación en reposo
+  sqlcipher_flutter_libs: ^0.5.4
+  sqlite3: ^2.7.0
   path_provider: ^2.1.5
   path: ^1.9.0
 
   # Supabase
-  supabase_flutter: ^2.8.1
+  supabase_flutter: ^2.8.4
 
   # Seguridad
   flutter_secure_storage: ^9.2.4
   local_auth: ^2.3.0
+
+  # Sync en background
+  workmanager: ^0.5.2
 
   # UI
   cupertino_icons: ^1.0.8
@@ -60,7 +65,7 @@ dev_dependencies:
 
   # Generadores de codigo
   build_runner: ^2.4.13
-  drift_dev: ^2.21.0
+  drift_dev: ^2.22.1
   riverpod_generator: ^2.6.1
   freezed: ^2.5.7
   json_serializable: ^6.8.0
