@@ -8,6 +8,6 @@ class CreateFamilyUseCase {
 
   final FamilyRepository _repository;
 
-  Future<AuthResult<Family>> call(String familyName) =>
+  Future<AuthResult<KakeiboFamily>> call(String familyName) =>
       _repository.createFamily(familyName);
 }

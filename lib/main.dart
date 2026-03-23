@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:kakeibo_pro/core/constants/app_colors.dart';
 import 'package:kakeibo_pro/core/constants/app_strings.dart';
-import 'package:kakeibo_pro/features/auth/domain/entities/family.dart';
+import 'package:kakeibo_pro/features/auth/domain/entities/family.dart' show KakeiboFamily;
 import 'package:kakeibo_pro/features/auth/presentation/pages/invite_member_page.dart';
 import 'package:kakeibo_pro/features/auth/presentation/pages/login_page.dart';
 import 'package:kakeibo_pro/features/auth/presentation/pages/register_page.dart';
@@ -118,7 +118,7 @@ class _KakeiboAppState extends ConsumerState<KakeiboApp> {
     });
 
     // Sincroniza estado de familia con GoRouter
-    ref.listen<AsyncValue<Family?>>(currentFamilyProvider, (_, next) {
+    ref.listen<AsyncValue<KakeiboFamily?>>(currentFamilyProvider, (_, next) {
       _routerNotifier.updateFamilyState(next);
     });
 
@@ -198,7 +198,7 @@ class _RouterNotifier extends ChangeNotifier {
     notifyListeners();
   }
 
-  void updateFamilyState(AsyncValue<Family?> next) {
+  void updateFamilyState(AsyncValue<KakeiboFamily?> next) {
     final newHasFamily = next.valueOrNull != null;
     final newIsLoading = next.isLoading;
 

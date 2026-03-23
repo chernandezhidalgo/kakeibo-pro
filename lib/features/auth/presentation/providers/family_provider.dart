@@ -44,7 +44,7 @@ AcceptInvitationUseCase acceptInvitationUseCase(
 /// Retorna null si el usuario no pertenece a ninguna familia aún.
 /// Es un [FutureProvider] porque la consulta a Supabase es asíncrona.
 @riverpod
-Future<Family?> currentFamily(CurrentFamilyRef ref) async {
+Future<KakeiboFamily?> currentFamily(CurrentFamilyRef ref) async {
   // Dependemos del usuario autenticado: si cambia, recargamos
   final user = await ref.watch(authStateProvider.future);
   if (user == null) return null;

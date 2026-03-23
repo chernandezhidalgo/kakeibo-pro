@@ -16,22 +16,25 @@ final _privateConstructorUsedError = UnsupportedError(
 );
 
 /// @nodoc
-mixin _$Family {
+mixin _$KakeiboFamily {
   String get id => throw _privateConstructorUsedError;
   String get name => throw _privateConstructorUsedError;
   DateTime get createdAt => throw _privateConstructorUsedError;
   List<FamilyMember> get members => throw _privateConstructorUsedError;
 
-  /// Create a copy of Family
+  /// Create a copy of KakeiboFamily
   /// with the given fields replaced by the non-null parameter values.
   @JsonKey(includeFromJson: false, includeToJson: false)
-  $FamilyCopyWith<Family> get copyWith => throw _privateConstructorUsedError;
+  $KakeiboFamilyCopyWith<KakeiboFamily> get copyWith =>
+      throw _privateConstructorUsedError;
 }
 
 /// @nodoc
-abstract class $FamilyCopyWith<$Res> {
-  factory $FamilyCopyWith(Family value, $Res Function(Family) then) =
-      _$FamilyCopyWithImpl<$Res, Family>;
+abstract class $KakeiboFamilyCopyWith<$Res> {
+  factory $KakeiboFamilyCopyWith(
+    KakeiboFamily value,
+    $Res Function(KakeiboFamily) then,
+  ) = _$KakeiboFamilyCopyWithImpl<$Res, KakeiboFamily>;
   @useResult
   $Res call({
     String id,
@@ -42,16 +45,16 @@ abstract class $FamilyCopyWith<$Res> {
 }
 
 /// @nodoc
-class _$FamilyCopyWithImpl<$Res, $Val extends Family>
-    implements $FamilyCopyWith<$Res> {
-  _$FamilyCopyWithImpl(this._value, this._then);
+class _$KakeiboFamilyCopyWithImpl<$Res, $Val extends KakeiboFamily>
+    implements $KakeiboFamilyCopyWith<$Res> {
+  _$KakeiboFamilyCopyWithImpl(this._value, this._then);
 
   // ignore: unused_field
   final $Val _value;
   // ignore: unused_field
   final $Res Function($Val) _then;
 
-  /// Create a copy of Family
+  /// Create a copy of KakeiboFamily
   /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
@@ -86,11 +89,12 @@ class _$FamilyCopyWithImpl<$Res, $Val extends Family>
 }
 
 /// @nodoc
-abstract class _$$FamilyImplCopyWith<$Res> implements $FamilyCopyWith<$Res> {
-  factory _$$FamilyImplCopyWith(
-    _$FamilyImpl value,
-    $Res Function(_$FamilyImpl) then,
-  ) = __$$FamilyImplCopyWithImpl<$Res>;
+abstract class _$$KakeiboFamilyImplCopyWith<$Res>
+    implements $KakeiboFamilyCopyWith<$Res> {
+  factory _$$KakeiboFamilyImplCopyWith(
+    _$KakeiboFamilyImpl value,
+    $Res Function(_$KakeiboFamilyImpl) then,
+  ) = __$$KakeiboFamilyImplCopyWithImpl<$Res>;
   @override
   @useResult
   $Res call({
@@ -102,15 +106,15 @@ abstract class _$$FamilyImplCopyWith<$Res> implements $FamilyCopyWith<$Res> {
 }
 
 /// @nodoc
-class __$$FamilyImplCopyWithImpl<$Res>
-    extends _$FamilyCopyWithImpl<$Res, _$FamilyImpl>
-    implements _$$FamilyImplCopyWith<$Res> {
-  __$$FamilyImplCopyWithImpl(
-    _$FamilyImpl _value,
-    $Res Function(_$FamilyImpl) _then,
+class __$$KakeiboFamilyImplCopyWithImpl<$Res>
+    extends _$KakeiboFamilyCopyWithImpl<$Res, _$KakeiboFamilyImpl>
+    implements _$$KakeiboFamilyImplCopyWith<$Res> {
+  __$$KakeiboFamilyImplCopyWithImpl(
+    _$KakeiboFamilyImpl _value,
+    $Res Function(_$KakeiboFamilyImpl) _then,
   ) : super(_value, _then);
 
-  /// Create a copy of Family
+  /// Create a copy of KakeiboFamily
   /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
@@ -121,7 +125,7 @@ class __$$FamilyImplCopyWithImpl<$Res>
     Object? members = null,
   }) {
     return _then(
-      _$FamilyImpl(
+      _$KakeiboFamilyImpl(
         id: null == id
             ? _value.id
             : id // ignore: cast_nullable_to_non_nullable
@@ -145,8 +149,8 @@ class __$$FamilyImplCopyWithImpl<$Res>
 
 /// @nodoc
 
-class _$FamilyImpl implements _Family {
-  const _$FamilyImpl({
+class _$KakeiboFamilyImpl implements _KakeiboFamily {
+  const _$KakeiboFamilyImpl({
     required this.id,
     this.name = 'Familia Hernández-Romero',
     required this.createdAt,
@@ -171,14 +175,14 @@ class _$FamilyImpl implements _Family {
 
   @override
   String toString() {
-    return 'Family(id: $id, name: $name, createdAt: $createdAt, members: $members)';
+    return 'KakeiboFamily(id: $id, name: $name, createdAt: $createdAt, members: $members)';
   }
 
   @override
   bool operator ==(Object other) {
     return identical(this, other) ||
         (other.runtimeType == runtimeType &&
-            other is _$FamilyImpl &&
+            other is _$KakeiboFamilyImpl &&
             (identical(other.id, id) || other.id == id) &&
             (identical(other.name, name) || other.name == name) &&
             (identical(other.createdAt, createdAt) ||
@@ -195,22 +199,22 @@ class _$FamilyImpl implements _Family {
     const DeepCollectionEquality().hash(_members),
   );
 
-  /// Create a copy of Family
+  /// Create a copy of KakeiboFamily
   /// with the given fields replaced by the non-null parameter values.
   @JsonKey(includeFromJson: false, includeToJson: false)
   @override
   @pragma('vm:prefer-inline')
-  _$$FamilyImplCopyWith<_$FamilyImpl> get copyWith =>
-      __$$FamilyImplCopyWithImpl<_$FamilyImpl>(this, _$identity);
+  _$$KakeiboFamilyImplCopyWith<_$KakeiboFamilyImpl> get copyWith =>
+      __$$KakeiboFamilyImplCopyWithImpl<_$KakeiboFamilyImpl>(this, _$identity);
 }
 
-abstract class _Family implements Family {
-  const factory _Family({
+abstract class _KakeiboFamily implements KakeiboFamily {
+  const factory _KakeiboFamily({
     required final String id,
     final String name,
     required final DateTime createdAt,
     final List<FamilyMember> members,
-  }) = _$FamilyImpl;
+  }) = _$KakeiboFamilyImpl;
 
   @override
   String get id;
@@ -221,10 +225,10 @@ abstract class _Family implements Family {
   @override
   List<FamilyMember> get members;
 
-  /// Create a copy of Family
+  /// Create a copy of KakeiboFamily
   /// with the given fields replaced by the non-null parameter values.
   @override
   @JsonKey(includeFromJson: false, includeToJson: false)
-  _$$FamilyImplCopyWith<_$FamilyImpl> get copyWith =>
+  _$$KakeiboFamilyImplCopyWith<_$KakeiboFamilyImpl> get copyWith =>
       throw _privateConstructorUsedError;
 }

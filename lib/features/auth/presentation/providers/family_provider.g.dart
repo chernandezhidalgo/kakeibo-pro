@@ -82,7 +82,7 @@ final acceptInvitationUseCaseProvider =
 // ignore: unused_element
 typedef AcceptInvitationUseCaseRef =
     AutoDisposeProviderRef<AcceptInvitationUseCase>;
-String _$currentFamilyHash() => r'5fe03a0d72fff155f4e4f76d3150c9d06287f471';
+String _$currentFamilyHash() => r'2ebd8b1c9e9f7f9dd03f894584112584c25b3a43';
 
 /// Carga la familia del usuario autenticado actualmente.
 /// Retorna null si el usuario no pertenece a ninguna familia aún.
@@ -90,19 +90,20 @@ String _$currentFamilyHash() => r'5fe03a0d72fff155f4e4f76d3150c9d06287f471';
 ///
 /// Copied from [currentFamily].
 @ProviderFor(currentFamily)
-final currentFamilyProvider = AutoDisposeFutureProvider<Family?>.internal(
-  currentFamily,
-  name: r'currentFamilyProvider',
-  debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
-      ? null
-      : _$currentFamilyHash,
-  dependencies: null,
-  allTransitiveDependencies: null,
-);
+final currentFamilyProvider =
+    AutoDisposeFutureProvider<KakeiboFamily?>.internal(
+      currentFamily,
+      name: r'currentFamilyProvider',
+      debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
+          ? null
+          : _$currentFamilyHash,
+      dependencies: null,
+      allTransitiveDependencies: null,
+    );
 
 @Deprecated('Will be removed in 3.0. Use Ref instead')
 // ignore: unused_element
-typedef CurrentFamilyRef = AutoDisposeFutureProviderRef<Family?>;
+typedef CurrentFamilyRef = AutoDisposeFutureProviderRef<KakeiboFamily?>;
 String _$familyMembersHash() => r'bc16b076bdfebcf9eac45bfcf0a2a0d12864ee65';
 
 /// Retorna todos los miembros de la familia actual.

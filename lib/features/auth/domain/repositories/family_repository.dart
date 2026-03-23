@@ -9,14 +9,14 @@ import 'package:kakeibo_pro/features/auth/domain/entities/family_member.dart';
 /// - Fallo → `(data: null, failure: AuthFailure(mensaje))`
 abstract interface class FamilyRepository {
   /// Crea una nueva familia con el usuario actual como Admin.
-  Future<AuthResult<Family>> createFamily(String name);
+  Future<AuthResult<KakeiboFamily>> createFamily(String name);
 
   /// Retorna la familia con sus miembros dado un [familyId].
-  Future<AuthResult<Family>> getFamily(String familyId);
+  Future<AuthResult<KakeiboFamily>> getFamily(String familyId);
 
   /// Retorna la familia del usuario autenticado actualmente,
   /// o `null` si aún no pertenece a ninguna.
-  Future<AuthResult<Family?>> getFamilyForCurrentUser();
+  Future<AuthResult<KakeiboFamily?>> getFamilyForCurrentUser();
 
   /// Añade un miembro existente (con userId conocido) a la familia.
   Future<AuthResult<FamilyMember>> addMember({

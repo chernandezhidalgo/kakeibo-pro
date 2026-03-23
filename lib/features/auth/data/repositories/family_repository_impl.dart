@@ -19,11 +19,11 @@ class FamilyRepositoryImpl implements FamilyRepository {
 
   // ── Mapeo Supabase → dominio ──────────────────────────────────────────
 
-  Family _mapFamily(
+  KakeiboFamily _mapFamily(
     Map<String, dynamic> data,
     List<FamilyMember> members,
   ) =>
-      Family(
+      KakeiboFamily(
         id: data['id'] as String,
         name: data['name'] as String,
         createdAt: DateTime.parse(data['created_at'] as String),
@@ -62,7 +62,7 @@ class FamilyRepositoryImpl implements FamilyRepository {
   // ── Operaciones ───────────────────────────────────────────────────────
 
   @override
-  Future<AuthResult<Family>> createFamily(String name) async {
+  Future<AuthResult<KakeiboFamily>> createFamily(String name) async {
     try {
       final currentUser = _client.auth.currentUser;
       if (currentUser == null) {
@@ -110,7 +110,7 @@ class FamilyRepositoryImpl implements FamilyRepository {
   }
 
   @override
-  Future<AuthResult<Family>> getFamily(String familyId) async {
+  Future<AuthResult<KakeiboFamily>> getFamily(String familyId) async {
     try {
       final familyData = await _client
           .from('families')
@@ -135,7 +135,7 @@ class FamilyRepositoryImpl implements FamilyRepository {
   }
 
   @override
-  Future<AuthResult<Family?>> getFamilyForCurrentUser() async {
+  Future<AuthResult<KakeiboFamily?>> getFamilyForCurrentUser() async {
     try {
       final userId = _client.auth.currentUser?.id;
       if (userId == null) return (data: null, failure: null);

@@ -8,11 +8,11 @@ part 'family.freezed.dart';
 /// Contiene la lista de [FamilyMember] cargados. Una familia tiene
 /// exactamente un miembro con rol [FamilyMemberRole.admin].
 @freezed
-class Family with _$Family {
-  const factory Family({
+class KakeiboFamily with _$KakeiboFamily {
+  const factory KakeiboFamily({
     required String id,
     @Default('Familia Hernández-Romero') String name,
     required DateTime createdAt,
     @Default([]) List<FamilyMember> members,
-  }) = _Family;
+  }) = _KakeiboFamily;
 }
