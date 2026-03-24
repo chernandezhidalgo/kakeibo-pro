@@ -11,6 +11,7 @@ import 'package:kakeibo_pro/core/sync/sync_worker.dart';
 import 'package:kakeibo_pro/features/auth/domain/entities/family.dart' show KakeiboFamily;
 import 'package:kakeibo_pro/features/auth/presentation/pages/invite_member_page.dart';
 import 'package:kakeibo_pro/features/auth/presentation/pages/login_page.dart';
+import 'package:kakeibo_pro/features/envelopes/presentation/pages/create_envelope_page.dart';
 import 'package:kakeibo_pro/features/home/presentation/pages/home_screen.dart';
 import 'package:kakeibo_pro/features/auth/presentation/pages/register_page.dart';
 import 'package:kakeibo_pro/features/auth/presentation/pages/setup_family_page.dart';
@@ -95,6 +96,15 @@ class _KakeiboAppState extends ConsumerState<KakeiboApp> {
           path: '/dashboard',
           name: 'dashboard',
           builder: (_, __) => const HomeScreen(),
+        ),
+        GoRoute(
+          path: '/sobres/crear',
+          name: 'crear-sobre',
+          builder: (context, state) {
+            final familyId =
+                state.uri.queryParameters['familyId'] ?? '';
+            return CreateEnvelopePage(familyId: familyId);
+          },
         ),
       ],
       redirect: (context, state) {

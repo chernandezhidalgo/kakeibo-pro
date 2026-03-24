@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:kakeibo_pro/core/constants/app_colors.dart';
 import 'package:kakeibo_pro/core/constants/app_strings.dart';
 import 'package:kakeibo_pro/core/utils/kakeibo_category_ui.dart';
@@ -25,7 +26,7 @@ class EnvelopesPage extends ConsumerWidget {
           loading: () => const _LoadingState(),
           error: (e, _) => _ErrorState(message: e.toString()),
           data: (envelopes) {
-            if (envelopes.isEmpty) return const _EmptyState();
+            if (envelopes.isEmpty) return _EmptyState(familyId: familyId);
             return _EnvelopesList(
               envelopes: envelopes,
               totalBudget: summary.totalBudget,
@@ -36,7 +37,7 @@ class EnvelopesPage extends ConsumerWidget {
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () {
-          // TODO: F2 — navegar a pantalla de crear sobre
+          context.push('/sobres/crear?familyId=$familyId');
         },
         backgroundColor: AppColors.green,
         foregroundColor: Colors.black,
@@ -217,7 +218,8 @@ class _ErrorState extends StatelessWidget {
 }
 
 class _EmptyState extends StatelessWidget {
-  const _EmptyState();
+  final String familyId;
+  const _EmptyState({required this.familyId});
 
   @override
   Widget build(BuildContext context) {
@@ -260,7 +262,7 @@ class _EmptyState extends StatelessWidget {
             const SizedBox(height: 32),
             ElevatedButton.icon(
               onPressed: () {
-                // TODO: F2 — crear sobre
+                context.push('/sobres/crear?familyId=$familyId');
               },
               icon: const Icon(Icons.add),
               label: const Text(AppStrings.sobresCrearCta),
