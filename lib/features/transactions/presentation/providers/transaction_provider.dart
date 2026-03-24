@@ -4,6 +4,7 @@ import 'package:kakeibo_pro/core/sync/sync_repository.dart';
 import 'package:kakeibo_pro/features/transactions/data/repositories/transaction_repository_impl.dart';
 import 'package:kakeibo_pro/features/transactions/domain/entities/transaction.dart';
 import 'package:kakeibo_pro/features/transactions/domain/repositories/transaction_repository.dart';
+import 'package:kakeibo_pro/features/transactions/domain/usecases/delete_transaction_usecase.dart';
 
 /// Instancia del repositorio de transacciones.
 final transactionRepositoryProvider = Provider<TransactionRepository>((ref) {
@@ -33,6 +34,13 @@ final monthlyTransactionsProvider =
       await ref.watch(transactionRepositoryProvider).getThisMonth(familyId);
   if (result.failure != null) return [];
   return result.data ?? [];
+});
+
+/// Caso de uso para eliminar una transacción con reversión atómica de spentAmount.
+///
+/// Uso: `ref.read(deleteTransactionUseCaseProvider).call(id)`
+final deleteTransactionUseCaseProvider = Provider<DeleteTransactionUseCase>((ref) {
+  return DeleteTransactionUseCase(ref.watch(transactionRepositoryProvider));
 });
 
 /// Gasto total del mes en la familia (solo transacciones de tipo expense).

@@ -131,6 +131,29 @@ class AppDatabase extends _$AppDatabase {
     });
   }
 
+  /// Elimina (soft-delete) una transacción y revierte su impacto en [spentAmount]
+  /// del sobre correspondiente, en una sola operación atómica.
+  ///
+  /// Si la transacción no existe o no tiene [envelopeId], solo hace soft-delete.
+  Future<void> deleteTransactionAtomic(String transactionId) {
+    return transaction(() async {
+      final tx = await transactionsDao.getById(transactionId);
+      if (tx == null) return;
+
+      await transactionsDao.softDelete(transactionId);
+
+      if (tx.envelopeId != null) {
+        // Delta inverso al que se aplicó al guardar
+        final reverseDelta = switch (tx.type) {
+          'expense' || 'transfer' || 'investment' => -tx.amount,
+          'income' => tx.amount,
+          _ => 0.0,
+        };
+        await envelopesDao.adjustSpent(tx.envelopeId!, reverseDelta);
+      }
+    });
+  }
+
   /// Retorna la ruta absoluta del archivo de base de datos en el dispositivo.
   static Future<String> getDatabasePath() async {
     final dir = await getApplicationDocumentsDirectory();

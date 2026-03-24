@@ -69,7 +69,8 @@ class TransactionRepositoryImpl implements TransactionRepository {
   @override
   Future<AppResult<Unit>> deleteTransaction(String id) async {
     try {
-      await _db.transactionsDao.softDelete(id);
+      // Soft-delete + reversión atómica del spentAmount del sobre
+      await _db.deleteTransactionAtomic(id);
       await _sync.enqueueDelete(
         tableName: 'transactions',
         recordId: id,

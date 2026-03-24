@@ -33,6 +33,12 @@ class TransactionsDao extends DatabaseAccessor<AppDatabase>
         .get();
   }
 
+  // Transacción por ID (para leer antes de eliminar)
+  Future<TransactionsTableData?> getById(String id) {
+    return (select(transactionsTable)..where((t) => t.id.equals(id)))
+        .getSingleOrNull();
+  }
+
   Future<void> upsertTransaction(TransactionsTableCompanion tx) {
     return into(transactionsTable).insertOnConflictUpdate(tx);
   }

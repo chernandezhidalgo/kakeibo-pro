@@ -67,7 +67,7 @@ class EnvelopeDetailPage extends ConsumerWidget {
 
 // ── Contenido principal ───────────────────────────────────────────────────────
 
-class _DetailContent extends StatelessWidget {
+class _DetailContent extends ConsumerWidget {
   final Envelope envelope;
   final AsyncValue<List<Transaction>> transactionsAsync;
 
@@ -77,7 +77,7 @@ class _DetailContent extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final categoryColor = KakeiboCategoryUi.color(envelope.kakeiboCategory);
     final percent = (envelope.spentPercentage / 100).clamp(0.0, 1.0);
     final isOver = envelope.isOverBudget;
@@ -271,8 +271,22 @@ class _DetailContent extends StatelessWidget {
             }
             return SliverList(
               delegate: SliverChildBuilderDelegate(
-                (context, index) =>
-                    _TransactionTile(transaction: transactions[index]),
+                (context, index) {
+                  final tx = transactions[index];
+                  return Dismissible(
+                    key: ValueKey(tx.id),
+                    direction: DismissDirection.endToStart,
+                    // Mostrar diálogo antes de confirmar el deslizamiento
+                    confirmDismiss: (_) => _confirmDelete(context, tx),
+                    onDismissed: (_) {
+                      ref
+                          .read(deleteTransactionUseCaseProvider)
+                          .call(tx.id);
+                    },
+                    background: _DeleteBackground(),
+                    child: _TransactionTile(transaction: tx),
+                  );
+                },
                 childCount: transactions.length,
               ),
             );
@@ -379,6 +393,98 @@ class _TransactionTile extends StatelessWidget {
                     color: AppColors.textMuted, fontSize: 11),
               ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Confirmación de eliminación ───────────────────────────────────────────────
+
+Future<bool> _confirmDelete(BuildContext context, Transaction tx) async {
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      backgroundColor: const Color(0xFF1E1E1E),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: const Text(
+        'Eliminar movimiento',
+        style: TextStyle(
+          color: AppColors.textPrimary,
+          fontSize: 17,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            tx.description,
+            style: const TextStyle(
+              color: AppColors.textPrimary,
+              fontSize: 15,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Este movimiento se eliminará y el saldo del sobre '
+            'se actualizará automáticamente.',
+            style: const TextStyle(color: AppColors.textMuted, fontSize: 13),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(ctx).pop(false),
+          child: const Text(
+            'Cancelar',
+            style: TextStyle(color: AppColors.textMuted),
+          ),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(ctx).pop(true),
+          child: const Text(
+            'Eliminar',
+            style: TextStyle(
+              color: AppColors.error,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+  return confirmed ?? false;
+}
+
+// ── Fondo rojo del Dismissible ────────────────────────────────────────────────
+
+class _DeleteBackground extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      decoration: BoxDecoration(
+        color: AppColors.error,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      alignment: Alignment.centerRight,
+      padding: const EdgeInsets.only(right: 20),
+      child: const Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.delete_outline_rounded, color: Colors.white, size: 22),
+          SizedBox(height: 4),
+          Text(
+            'Eliminar',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ],
       ),
