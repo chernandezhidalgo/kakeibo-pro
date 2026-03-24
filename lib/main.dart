@@ -13,9 +13,12 @@ import 'package:kakeibo_pro/features/auth/domain/entities/family.dart' show Kake
 import 'package:kakeibo_pro/features/auth/presentation/pages/invite_member_page.dart';
 import 'package:kakeibo_pro/features/auth/presentation/pages/login_page.dart';
 import 'package:kakeibo_pro/features/envelopes/presentation/pages/create_envelope_page.dart';
+import 'package:kakeibo_pro/features/envelopes/presentation/pages/edit_envelope_page.dart';
 import 'package:kakeibo_pro/features/envelopes/presentation/pages/envelope_detail_page.dart';
 import 'package:kakeibo_pro/features/envelopes/domain/entities/envelope.dart';
+import 'package:kakeibo_pro/features/transactions/domain/entities/transaction.dart';
 import 'package:kakeibo_pro/features/transactions/presentation/pages/add_transaction_page.dart';
+import 'package:kakeibo_pro/features/transactions/presentation/pages/edit_transaction_page.dart';
 import 'package:kakeibo_pro/features/home/presentation/pages/home_screen.dart';
 import 'package:kakeibo_pro/features/auth/presentation/pages/register_page.dart';
 import 'package:kakeibo_pro/features/auth/presentation/pages/setup_family_page.dart';
@@ -137,6 +140,22 @@ class _KakeiboAppState extends ConsumerState<KakeiboApp> {
               envelope: envelope,
               familyId: familyId,
             );
+          },
+        ),
+        GoRoute(
+          path: '/sobres/:envelopeId/editar',
+          name: 'editar-sobre',
+          builder: (context, state) {
+            final envelope = state.extra as Envelope;
+            return EditEnvelopePage(envelope: envelope);
+          },
+        ),
+        GoRoute(
+          path: '/sobres/:envelopeId/movimiento/:txId/editar',
+          name: 'editar-movimiento',
+          builder: (context, state) {
+            final transaction = state.extra as Transaction;
+            return EditTransactionPage(transaction: transaction);
           },
         ),
       ],

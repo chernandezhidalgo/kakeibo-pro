@@ -5,6 +5,7 @@ import 'package:kakeibo_pro/features/transactions/data/repositories/transaction_
 import 'package:kakeibo_pro/features/transactions/domain/entities/transaction.dart';
 import 'package:kakeibo_pro/features/transactions/domain/repositories/transaction_repository.dart';
 import 'package:kakeibo_pro/features/transactions/domain/usecases/delete_transaction_usecase.dart';
+import 'package:kakeibo_pro/features/transactions/domain/usecases/update_transaction_usecase.dart';
 
 /// Instancia del repositorio de transacciones.
 final transactionRepositoryProvider = Provider<TransactionRepository>((ref) {
@@ -41,6 +42,13 @@ final monthlyTransactionsProvider =
 /// Uso: `ref.read(deleteTransactionUseCaseProvider).call(id)`
 final deleteTransactionUseCaseProvider = Provider<DeleteTransactionUseCase>((ref) {
   return DeleteTransactionUseCase(ref.watch(transactionRepositoryProvider));
+});
+
+/// Caso de uso para actualizar una transacción con delta diferencial.
+///
+/// Uso: `ref.read(updateTransactionUseCaseProvider).call(transaction)`
+final updateTransactionUseCaseProvider = Provider<UpdateTransactionUseCase>((ref) {
+  return UpdateTransactionUseCase(ref.watch(transactionRepositoryProvider));
 });
 
 /// Gasto total del mes en la familia (solo transacciones de tipo expense).

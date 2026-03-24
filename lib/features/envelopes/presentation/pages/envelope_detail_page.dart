@@ -10,6 +10,7 @@ import 'package:kakeibo_pro/features/envelopes/presentation/providers/envelope_p
 import 'package:kakeibo_pro/features/transactions/domain/entities/transaction.dart';
 import 'package:kakeibo_pro/features/transactions/presentation/providers/transaction_provider.dart';
 
+
 class EnvelopeDetailPage extends ConsumerWidget {
   final String envelopeId;
   final String familyId;
@@ -57,6 +58,7 @@ class EnvelopeDetailPage extends ConsumerWidget {
             return _DetailContent(
               envelope: envelope,
               transactionsAsync: transactionsAsync,
+              familyId: familyId,
             );
           },
         ),
@@ -70,10 +72,12 @@ class EnvelopeDetailPage extends ConsumerWidget {
 class _DetailContent extends ConsumerWidget {
   final Envelope envelope;
   final AsyncValue<List<Transaction>> transactionsAsync;
+  final String familyId;
 
   const _DetailContent({
     required this.envelope,
     required this.transactionsAsync,
+    required this.familyId,
   });
 
   @override
@@ -84,7 +88,7 @@ class _DetailContent extends ConsumerWidget {
 
     return CustomScrollView(
       slivers: [
-        // ── AppBar con nombre del sobre ────────────────────────────────
+        // ── AppBar con nombre del sobre + botón editar ─────────────────
         SliverAppBar(
           backgroundColor: AppColors.background,
           leading: BackButton(color: AppColors.textMuted),
@@ -105,6 +109,19 @@ class _DetailContent extends ConsumerWidget {
               ),
             ],
           ),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.edit_outlined,
+                  color: AppColors.textMuted, size: 20),
+              tooltip: 'Editar sobre',
+              onPressed: () {
+                context.push(
+                  '/sobres/${envelope.id}/editar',
+                  extra: envelope,
+                );
+              },
+            ),
+          ],
           floating: true,
           snap: true,
           elevation: 0,
@@ -284,7 +301,13 @@ class _DetailContent extends ConsumerWidget {
                           .call(tx.id);
                     },
                     background: _DeleteBackground(),
-                    child: _TransactionTile(transaction: tx),
+                    child: _TransactionTile(
+                      transaction: tx,
+                      onEdit: () => context.push(
+                        '/sobres/${envelope.id}/movimiento/${tx.id}/editar',
+                        extra: tx,
+                      ),
+                    ),
                   );
                 },
                 childCount: transactions.length,
@@ -304,8 +327,12 @@ class _DetailContent extends ConsumerWidget {
 
 class _TransactionTile extends StatelessWidget {
   final Transaction transaction;
+  final VoidCallback? onEdit;
 
-  const _TransactionTile({required this.transaction});
+  const _TransactionTile({
+    required this.transaction,
+    this.onEdit,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -319,7 +346,7 @@ class _TransactionTile extends StatelessWidget {
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.fromLTRB(14, 10, 4, 10),
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(12),
@@ -394,6 +421,17 @@ class _TransactionTile extends StatelessWidget {
               ),
             ],
           ),
+
+          // Botón editar
+          if (onEdit != null)
+            IconButton(
+              icon: const Icon(Icons.edit_outlined,
+                  color: AppColors.textMuted, size: 16),
+              onPressed: onEdit,
+              padding: const EdgeInsets.all(8),
+              constraints: const BoxConstraints(),
+              tooltip: 'Editar',
+            ),
         ],
       ),
     );

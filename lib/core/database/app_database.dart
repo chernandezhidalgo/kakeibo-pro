@@ -1,3 +1,5 @@
+import 'dart:math' show Random;
+
 import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
 import 'package:flutter/foundation.dart';
@@ -92,9 +94,8 @@ class AppDatabase extends _$AppDatabase {
     );
   }
 
-  /// Genera y persiste una clave de 256 bits en Flutter Secure Storage.
-  /// En producción se debe usar [dart:math Random.secure()] en lugar de
-  /// la semilla basada en timestamp.
+  /// Genera y persiste una clave de 256 bits usando [Random.secure()].
+  /// Si ya existe una clave almacenada, la retorna directamente.
   static Future<String> _getOrCreateEncryptionKey() async {
     const storage = FlutterSecureStorage(
       aOptions: AndroidOptions(encryptedSharedPreferences: true),
@@ -104,11 +105,8 @@ class AppDatabase extends _$AppDatabase {
     final existingKey = await storage.read(key: keyName);
     if (existingKey != null) return existingKey;
 
-    // TODO (producción): reemplazar por Random.secure() de dart:math
-    final bytes = List<int>.generate(
-      32,
-      (i) => (DateTime.now().microsecondsSinceEpoch + i) % 256,
-    );
+    final rng = Random.secure();
+    final bytes = List<int>.generate(32, (_) => rng.nextInt(256));
     final newKey =
         bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
     await storage.write(key: keyName, value: newKey);
@@ -152,6 +150,64 @@ class AppDatabase extends _$AppDatabase {
         await envelopesDao.adjustSpent(tx.envelopeId!, reverseDelta);
       }
     });
+  }
+
+  /// Actualiza una transacción existente y ajusta el [spentAmount] del sobre
+  /// usando el **delta diferencial** (nueva contribución − vieja contribución).
+  ///
+  /// Si el [envelopeId] cambia, revierte la contribución en el sobre antiguo
+  /// y la aplica en el nuevo, todo en una sola operación atómica.
+  Future<void> updateTransactionAtomic({
+    required TransactionsTableCompanion newTx,
+  }) {
+    return transaction(() async {
+      final txId = newTx.id.value;
+      final oldTx = await transactionsDao.getById(txId);
+      if (oldTx == null) return;
+
+      // 1. Actualizar la fila de la transacción
+      await transactionsDao.upsertTransaction(newTx);
+
+      // 2. Calcular contribuciones al spentAmount
+      final oldEnvId = oldTx.envelopeId;
+      final newEnvId =
+          newTx.envelopeId.present ? newTx.envelopeId.value : oldEnvId;
+      final newType =
+          newTx.type.present ? newTx.type.value : oldTx.type;
+      final newAmount =
+          newTx.amount.present ? newTx.amount.value : oldTx.amount;
+
+      final oldContrib = _txContribution(oldTx.type, oldTx.amount);
+      final newContrib = _txContribution(newType, newAmount);
+
+      if (oldEnvId == null && newEnvId == null) return;
+
+      if (oldEnvId == newEnvId || oldEnvId == null) {
+        // Mismo sobre: aplica solo la diferencia
+        if (newEnvId != null) {
+          final netDelta = newContrib - oldContrib;
+          if (netDelta != 0) {
+            await envelopesDao.adjustSpent(newEnvId, netDelta);
+          }
+        }
+      } else {
+        // Sobre distinto: revertir en el viejo, aplicar en el nuevo
+        await envelopesDao.adjustSpent(oldEnvId, -oldContrib);
+        if (newEnvId != null) {
+          await envelopesDao.adjustSpent(newEnvId, newContrib);
+        }
+      }
+    });
+  }
+
+  /// Contribución de una transacción al [spentAmount].
+  /// Gastos/transferencias/inversiones suman; ingresos restan.
+  static double _txContribution(String type, double amount) {
+    return switch (type) {
+      'expense' || 'transfer' || 'investment' => amount,
+      'income' => -amount,
+      _ => 0.0,
+    };
   }
 
   /// Retorna la ruta absoluta del archivo de base de datos en el dispositivo.

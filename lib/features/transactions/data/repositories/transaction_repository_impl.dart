@@ -67,6 +67,21 @@ class TransactionRepositoryImpl implements TransactionRepository {
   }
 
   @override
+  Future<AppResult<Unit>> updateTransaction(Transaction transaction) async {
+    try {
+      await _db.updateTransactionAtomic(newTx: transaction.toCompanion());
+      await _sync.enqueueUpdate(
+        tableName: 'transactions',
+        recordId: transaction.id,
+        payload: transaction.toSyncPayload(),
+      );
+      return appSuccess(Unit.value);
+    } catch (e) {
+      return appFailure(Failure.database(e.toString()));
+    }
+  }
+
+  @override
   Future<AppResult<Unit>> deleteTransaction(String id) async {
     try {
       // Soft-delete + reversión atómica del spentAmount del sobre

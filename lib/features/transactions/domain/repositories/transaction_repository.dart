@@ -12,6 +12,9 @@ abstract interface class TransactionRepository {
   /// Crea o actualiza una transacción en la DB local y encola para sync.
   Future<AppResult<Unit>> saveTransaction(Transaction transaction);
 
+  /// Actualiza una transacción existente y aplica el delta diferencial al sobre.
+  Future<AppResult<Unit>> updateTransaction(Transaction transaction);
+
   /// Soft-delete de una transacción.
   Future<AppResult<Unit>> deleteTransaction(String id);
 }
