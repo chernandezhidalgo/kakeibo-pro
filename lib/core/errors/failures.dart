@@ -31,3 +31,16 @@ final class Unit {
 ///
 /// Verificar éxito: `result.failure == null`
 typedef AuthResult<T> = ({T? data, AuthFailure? failure});
+
+/// Alias general para resultados de cualquier operación de repositorio.
+///
+/// Convención idéntica a [AuthResult]:
+/// - Éxito → `(data: valor, failure: null)`
+/// - Fallo → `(data: null, failure: DatabaseFailure(...))`
+typedef AppResult<T> = ({T? data, Failure? failure});
+
+/// Helper para construir un resultado exitoso.
+AppResult<T> appSuccess<T>(T data) => (data: data, failure: null);
+
+/// Helper para construir un resultado fallido.
+AppResult<T> appFailure<T>(Failure failure) => (data: null, failure: failure);
