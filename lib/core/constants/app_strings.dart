@@ -48,4 +48,21 @@ class AppStrings {
   // Inversión (2)
   static const String envelopeBnfondos = 'BNFONDOS / Inversiones';
   static const String envelopeFondoEmergencia = 'Fondo de emergencia';
+
+  // ── Navegación ───────────────────────────────────────────────────────────
+  static const String navSobres = 'Sobres';
+  static const String navResumen = 'Resumen';
+  static const String navKakeibo = 'Kakeibo';
+  static const String navPerfil = 'Perfil';
+
+  // ── Sobres ───────────────────────────────────────────────────────────────
+  static const String sobresTitle = 'Mis sobres';
+  static const String sobresVacioTitle = 'Sin sobres aún';
+  static const String sobresVacioSubtitle =
+      'Crea tu primer sobre para empezar a organizar tus gastos familiares.';
+  static const String sobresCrearCta = 'Crear primer sobre';
+  static const String sobresPresupuesto = 'Presupuesto';
+  static const String sobresGastado = 'Gastado';
+  static const String sobreDisponible = 'Disponible';
+  static const String sobreSobrepasado = 'Sobrepasado';
 }

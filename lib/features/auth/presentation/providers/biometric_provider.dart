@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/widgets.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
@@ -124,6 +125,14 @@ class Biometric extends _$Biometric with WidgetsBindingObserver {
   // ── Privado ─────────────────────────────────────────────────────────────
 
   Future<void> _checkSupport() async {
+    // local_auth no está disponible en web — biometría deshabilitada.
+    if (kIsWeb) {
+      // await Future.value() cede el control al event loop, permitiendo que
+      // build() retorne y el provider quede inicializado antes de tocar state.
+      await Future.value();
+      state = state.copyWith(isSupported: false, isLoading: false);
+      return;
+    }
     final canCheck = await _localAuth.canCheckBiometrics;
     final isDeviceSupported = await _localAuth.isDeviceSupported();
     state = state.copyWith(

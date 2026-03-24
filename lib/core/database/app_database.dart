@@ -1,5 +1,6 @@
 import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
@@ -66,11 +67,28 @@ class AppDatabase extends _$AppDatabase {
   /// Una vez confirmada la API, se deberá pasar la clave obtenida de
   /// [_getOrCreateEncryptionKey()] al conector nativo de SQLCipher.
   static Future<AppDatabase> open() async {
-    // Preparar la clave de encriptación para uso futuro con SQLCipher
-    await _getOrCreateEncryptionKey();
+    // En plataformas nativas preparamos la clave de encriptación (SQLCipher).
+    // En web este paso se omite porque FlutterSecureStorage no está disponible.
+    if (!kIsWeb) {
+      await _getOrCreateEncryptionKey();
+    }
 
     return AppDatabase(
-      driftDatabase(name: 'kakeibo_pro'),
+      driftDatabase(
+        name: 'kakeibo_pro',
+        web: DriftWebOptions(
+          sqlite3Wasm: Uri.parse('sqlite3.wasm'),
+          driftWorker: Uri.parse('drift_worker.js'),
+          onResult: (result) {
+            if (result.missingFeatures.isNotEmpty) {
+              debugPrint(
+                'Drift web: usando implementación de respaldo '
+                'por falta de: ${result.missingFeatures}',
+              );
+            }
+          },
+        ),
+      ),
     );
   }
 
