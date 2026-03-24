@@ -35,8 +35,26 @@ class TransactionRepositoryImpl implements TransactionRepository {
   @override
   Future<AppResult<Unit>> saveTransaction(Transaction transaction) async {
     try {
-      await _db.transactionsDao
-          .upsertTransaction(transaction.toCompanion());
+      // Calcular delta: gastos e inversiones suman al spentAmount;
+      // ingresos restan (permiten compensar gastos en el sobre).
+      final delta = switch (transaction.transactionType) {
+        TransactionType.expense => transaction.amount,
+        TransactionType.income => -transaction.amount,
+        TransactionType.transfer => transaction.amount,
+        TransactionType.investment => transaction.amount,
+      };
+
+      // Guardar transacción y ajustar el sobre en una transacción atómica
+      if (transaction.envelopeId != null) {
+        await _db.saveTransactionAtomic(
+          tx: transaction.toCompanion(),
+          envelopeId: transaction.envelopeId!,
+          delta: delta,
+        );
+      } else {
+        await _db.transactionsDao.upsertTransaction(transaction.toCompanion());
+      }
+
       await _sync.enqueueUpdate(
         tableName: 'transactions',
         recordId: transaction.id,

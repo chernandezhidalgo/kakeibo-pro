@@ -115,6 +115,22 @@ class AppDatabase extends _$AppDatabase {
     return newKey;
   }
 
+  /// Guarda una transacción y ajusta el gasto del sobre en una sola operación atómica.
+  ///
+  /// [tx] — companion de la transacción a insertar/actualizar.
+  /// [envelopeId] — ID del sobre cuyo [spentAmount] se debe ajustar.
+  /// [delta] — cantidad a sumar a [spentAmount] (positivo = gasto, negativo = ingreso/reversión).
+  Future<void> saveTransactionAtomic({
+    required TransactionsTableCompanion tx,
+    required String envelopeId,
+    required double delta,
+  }) {
+    return transaction(() async {
+      await transactionsDao.upsertTransaction(tx);
+      await envelopesDao.adjustSpent(envelopeId, delta);
+    });
+  }
+
   /// Retorna la ruta absoluta del archivo de base de datos en el dispositivo.
   static Future<String> getDatabasePath() async {
     final dir = await getApplicationDocumentsDirectory();

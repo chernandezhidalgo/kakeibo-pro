@@ -52,4 +52,17 @@ class EnvelopesDao extends DatabaseAccessor<AppDatabase>
       ),
     );
   }
+
+  // Ajustar el gasto acumulado del sobre (delta positivo = gasto, negativo = ingreso/reversión)
+  Future<void> adjustSpent(String id, double delta) async {
+    final envelope = await getEnvelopeById(id);
+    if (envelope == null) return;
+    await (update(envelopesTable)..where((t) => t.id.equals(id))).write(
+      EnvelopesTableCompanion(
+        spentAmount: Value(envelope.spentAmount + delta),
+        updatedAt: Value(DateTime.now()),
+        isSynced: const Value(false),
+      ),
+    );
+  }
 }

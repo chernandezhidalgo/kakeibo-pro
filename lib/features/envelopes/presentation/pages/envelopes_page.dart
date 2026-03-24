@@ -31,6 +31,7 @@ class EnvelopesPage extends ConsumerWidget {
               envelopes: envelopes,
               totalBudget: summary.totalBudget,
               totalSpent: summary.totalSpent,
+              familyId: familyId,
             );
           },
         ),
@@ -53,11 +54,13 @@ class _EnvelopesList extends StatelessWidget {
   final List<Envelope> envelopes;
   final double totalBudget;
   final double totalSpent;
+  final String familyId;
 
   const _EnvelopesList({
     required this.envelopes,
     required this.totalBudget,
     required this.totalSpent,
+    required this.familyId,
   });
 
   @override
@@ -115,7 +118,9 @@ class _EnvelopesList extends StatelessWidget {
                   return EnvelopeCard(
                     envelope: envelope,
                     onTap: () {
-                      // TODO: F2 — navegar al detalle del sobre
+                      context.push(
+                        '/sobres/${envelope.id}?familyId=$familyId',
+                      );
                     },
                   );
                 },

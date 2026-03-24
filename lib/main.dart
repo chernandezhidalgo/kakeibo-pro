@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:kakeibo_pro/core/constants/app_colors.dart';
@@ -12,6 +13,9 @@ import 'package:kakeibo_pro/features/auth/domain/entities/family.dart' show Kake
 import 'package:kakeibo_pro/features/auth/presentation/pages/invite_member_page.dart';
 import 'package:kakeibo_pro/features/auth/presentation/pages/login_page.dart';
 import 'package:kakeibo_pro/features/envelopes/presentation/pages/create_envelope_page.dart';
+import 'package:kakeibo_pro/features/envelopes/presentation/pages/envelope_detail_page.dart';
+import 'package:kakeibo_pro/features/envelopes/domain/entities/envelope.dart';
+import 'package:kakeibo_pro/features/transactions/presentation/pages/add_transaction_page.dart';
 import 'package:kakeibo_pro/features/home/presentation/pages/home_screen.dart';
 import 'package:kakeibo_pro/features/auth/presentation/pages/register_page.dart';
 import 'package:kakeibo_pro/features/auth/presentation/pages/setup_family_page.dart';
@@ -24,6 +28,9 @@ Future<void> main() async {
 
   // 1. Supabase — lee variables inyectadas en tiempo de compilación:
   //    flutter run --dart-define=SUPABASE_URL=... --dart-define=SUPABASE_ANON_KEY=...
+  // Inicializar datos de localización para DateFormat en español
+  await initializeDateFormatting('es');
+
   await Supabase.initialize(
     url: const String.fromEnvironment('SUPABASE_URL'),
     anonKey: const String.fromEnvironment('SUPABASE_ANON_KEY'),
@@ -104,6 +111,32 @@ class _KakeiboAppState extends ConsumerState<KakeiboApp> {
             final familyId =
                 state.uri.queryParameters['familyId'] ?? '';
             return CreateEnvelopePage(familyId: familyId);
+          },
+        ),
+        GoRoute(
+          path: '/sobres/:envelopeId',
+          name: 'detalle-sobre',
+          builder: (context, state) {
+            final envelopeId = state.pathParameters['envelopeId'] ?? '';
+            final familyId =
+                state.uri.queryParameters['familyId'] ?? '';
+            return EnvelopeDetailPage(
+              envelopeId: envelopeId,
+              familyId: familyId,
+            );
+          },
+        ),
+        GoRoute(
+          path: '/sobres/:envelopeId/agregar-movimiento',
+          name: 'agregar-movimiento',
+          builder: (context, state) {
+            final familyId =
+                state.uri.queryParameters['familyId'] ?? '';
+            final envelope = state.extra as Envelope;
+            return AddTransactionPage(
+              envelope: envelope,
+              familyId: familyId,
+            );
           },
         ),
       ],
