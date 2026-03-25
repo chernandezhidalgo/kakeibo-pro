@@ -8,6 +8,7 @@ import 'package:kakeibo_pro/core/utils/kakeibo_category_ui.dart';
 import 'package:kakeibo_pro/features/envelopes/domain/entities/envelope.dart';
 import 'package:kakeibo_pro/features/envelopes/presentation/providers/envelope_provider.dart';
 import 'package:kakeibo_pro/features/transactions/domain/entities/transaction.dart';
+import 'package:kakeibo_pro/features/auth/presentation/providers/auth_provider.dart';
 import 'package:kakeibo_pro/features/transactions/presentation/providers/transaction_provider.dart';
 
 
@@ -110,6 +111,30 @@ class _DetailContent extends ConsumerWidget {
             ],
           ),
           actions: [
+            IconButton(
+              icon: const Icon(Icons.receipt_long_outlined,
+                  color: AppColors.textMuted, size: 20),
+              tooltip: 'Escanear recibo (OCR)',
+              onPressed: () {
+                context.push(
+                  '/sobres/${envelope.id}/ocr'
+                  '?familyId=$familyId',
+                );
+              },
+            ),
+            IconButton(
+              icon: const Icon(Icons.upload_file_outlined,
+                  color: AppColors.textMuted, size: 20),
+              tooltip: 'Importar CSV',
+              onPressed: () {
+                final name = Uri.encodeComponent(envelope.name);
+                final userId = ref.read(currentUserIdProvider);
+                context.push(
+                  '/sobres/${envelope.id}/importar-csv'
+                  '?familyId=$familyId&envelopeName=$name&userId=$userId',
+                );
+              },
+            ),
             IconButton(
               icon: const Icon(Icons.edit_outlined,
                   color: AppColors.textMuted, size: 20),

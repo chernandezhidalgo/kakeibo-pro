@@ -31,6 +31,20 @@
             </intent-filter>
         </activity>
 
+        <!-- MSAL: actividad necesaria para el flujo OAuth de Microsoft -->
+        <activity android:name="com.microsoft.identity.client.BrowserTabActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <!-- Reemplaza con tu redirect URI registrada en Azure Portal -->
+                <!-- msauth://<PACKAGE_NAME>/<BASE64_URL_HASH> -->
+                <data android:scheme="msauth"
+                      android:host="com.kakeibopro.app" />
+            </intent-filter>
+        </activity>
+
         <!-- WorkManager: servicio de sincronización en background -->
         <service
             android:name="androidx.work.impl.background.systemalarm.SystemAlarmService"

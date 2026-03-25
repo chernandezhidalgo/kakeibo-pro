@@ -4,8 +4,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:kakeibo_pro/core/constants/app_colors.dart';
 import 'package:kakeibo_pro/core/utils/currency_formatter.dart';
+import 'package:kakeibo_pro/features/ai/domain/models/ai_categorization_request.dart';
+import 'package:kakeibo_pro/features/ai/presentation/providers/ai_provider.dart';
 import 'package:kakeibo_pro/features/auth/presentation/providers/auth_provider.dart';
 import 'package:kakeibo_pro/features/envelopes/domain/entities/envelope.dart';
+import 'package:kakeibo_pro/features/envelopes/presentation/providers/envelope_provider.dart';
 import 'package:kakeibo_pro/features/transactions/domain/entities/transaction.dart';
 import 'package:kakeibo_pro/features/transactions/presentation/providers/add_transaction_notifier.dart';
 
@@ -183,6 +186,133 @@ class _AddTransactionPageState extends ConsumerState<AddTransactionPage> {
                         required isFocused, maxLength}) =>
                     null,
               ),
+            ),
+
+            const SizedBox(height: 12),
+
+            // ── Botón "Sugerir sobre" ──────────────────────────────────────
+            Consumer(
+              builder: (context, ref, _) {
+                final catState = ref.watch(
+                    categorizationProvider(widget.envelope.id));
+                final catNotifier = ref.read(
+                    categorizationProvider(widget.envelope.id).notifier);
+                final envelopes = ref
+                    .watch(envelopesProvider(widget.familyId))
+                    .valueOrNull ?? [];
+
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    OutlinedButton.icon(
+                      icon: catState is CategorizationLoading
+                          ? const SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: AppColors.blue,
+                              ),
+                            )
+                          : const Icon(Icons.auto_awesome_outlined,
+                              size: 16, color: AppColors.blue),
+                      label: Text(
+                        catState is CategorizationLoading
+                            ? 'Consultando IA…'
+                            : 'Sugerir sobre con IA',
+                        style: const TextStyle(
+                            color: AppColors.blue, fontSize: 13),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: AppColors.blue),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 10),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                      ),
+                      onPressed: (catState is CategorizationLoading ||
+                              !state.isDescriptionValid)
+                          ? null
+                          : () {
+                              final options = envelopes
+                                  .map((e) => EnvelopeOption(
+                                        id: e.id,
+                                        name: e.name,
+                                        category: e.kakeiboCategory.name,
+                                        emoji: e.iconEmoji,
+                                      ))
+                                  .toList();
+                              catNotifier.categorize(
+                                AiCategorizationRequest(
+                                  description: state.description,
+                                  merchantName:
+                                      (state.merchantName ?? '').isNotEmpty
+                                          ? state.merchantName
+                                          : null,
+                                  amount: state.amount,
+                                  currency: 'CRC',
+                                  availableEnvelopes: options,
+                                ),
+                              );
+                            },
+                    ),
+                    if (catState is CategorizationSuccess) ...[
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: AppColors.blue.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                              color: AppColors.blue.withValues(alpha: 0.3)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.lightbulb_outline,
+                                color: AppColors.blue, size: 18),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Sugerido: ${catState.result.envelopeName}',
+                                    style: const TextStyle(
+                                      color: AppColors.textPrimary,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  Text(
+                                    catState.result.reasoning,
+                                    style: const TextStyle(
+                                      color: AppColors.textMuted,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.close,
+                                  size: 16, color: AppColors.textMuted),
+                              onPressed: catNotifier.reset,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                    if (catState is CategorizationError) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        catState.message,
+                        style: const TextStyle(
+                            color: AppColors.error, fontSize: 12),
+                      ),
+                    ],
+                  ],
+                );
+              },
             ),
 
             const SizedBox(height: 28),

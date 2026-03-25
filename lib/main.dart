@@ -1,7 +1,13 @@
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:kakeibo_pro/core/notifications/notification_service.dart';
+import 'package:kakeibo_pro/core/purchases/purchases_service.dart';
+import 'package:kakeibo_pro/features/paywall/presentation/pages/paywall_page.dart';
+import 'package:kakeibo_pro/features/settings/presentation/pages/settings_page.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:go_router/go_router.dart';
 import 'package:kakeibo_pro/core/constants/app_colors.dart';
 import 'package:kakeibo_pro/core/constants/app_strings.dart';
@@ -19,7 +25,18 @@ import 'package:kakeibo_pro/features/envelopes/domain/entities/envelope.dart';
 import 'package:kakeibo_pro/features/transactions/domain/entities/transaction.dart';
 import 'package:kakeibo_pro/features/transactions/presentation/pages/add_transaction_page.dart';
 import 'package:kakeibo_pro/features/transactions/presentation/pages/edit_transaction_page.dart';
+import 'package:kakeibo_pro/core/utils/platform_utils.dart';
 import 'package:kakeibo_pro/features/home/presentation/pages/home_screen.dart';
+import 'package:kakeibo_pro/features/home/presentation/pages/teen_home_screen.dart';
+import 'package:kakeibo_pro/features/home/presentation/pages/windows_home_screen.dart';
+import 'package:kakeibo_pro/features/csv/presentation/pages/csv_import_page.dart';
+import 'package:kakeibo_pro/features/email/presentation/pages/email_transactions_page.dart';
+import 'package:kakeibo_pro/features/email/presentation/pages/gmail_connect_page.dart';
+import 'package:kakeibo_pro/features/email/presentation/pages/outlook_connect_page.dart';
+import 'package:kakeibo_pro/features/ai/presentation/pages/chat_page.dart';
+import 'package:kakeibo_pro/features/ocr/presentation/pages/ocr_capture_page.dart';
+import 'package:kakeibo_pro/features/goals/presentation/pages/savings_goals_page.dart';
+import 'package:kakeibo_pro/features/kakeibo/presentation/pages/kakeibo_reflection_page.dart';
 import 'package:kakeibo_pro/features/auth/presentation/pages/register_page.dart';
 import 'package:kakeibo_pro/features/auth/presentation/pages/setup_family_page.dart';
 import 'package:kakeibo_pro/features/auth/presentation/providers/auth_provider.dart';
@@ -42,20 +59,54 @@ Future<void> main() async {
   // 2. Base de datos local Drift
   final database = await AppDatabase.open();
 
-  // 3. WorkManager y listener de red — solo disponibles en Android (no en web)
+  // 3. Firebase + NotificationService (solo en plataformas móviles)
+  if (!kIsWeb) {
+    await Firebase.initializeApp();
+    await NotificationService.instance.initialize();
+  }
+
+  // 4. RevenueCat — configurar antes de runApp.
+  //    REVENUECAT_API_KEY se inyecta con --dart-define en builds de producción.
+  //    En desarrollo (key vacía) el servicio queda silencioso (modo demo).
+  if (!kIsWeb) {
+    await PurchasesService().configure(
+      const String.fromEnvironment(
+        'REVENUECAT_API_KEY',
+        defaultValue: 'TU_REVENUECAT_API_KEY',
+      ),
+      '', // userId se actualiza después del login via authStateProvider
+    );
+  }
+
+  // 5. WorkManager y listener de red — solo disponibles en Android (no en web)
   if (!kIsWeb) {
     await SyncWorkerSetup.initialize();
     await SyncWorkerSetup.registerPeriodicSync();
     ConnectivityListener.start();
   }
 
-  runApp(
-    ProviderScope(
-      overrides: [
-        // Inyectar la instancia real de la DB para todos los providers
-        appDatabaseProvider.overrideWithValue(database),
-      ],
-      child: const KakeiboApp(),
+  // 6. Sentry — envuelve runApp para capturar crashes y performance.
+  //    SENTRY_DSN vacío en desarrollo = Sentry silencioso (sin enviar datos).
+  await SentryFlutter.init(
+    (options) {
+      options.dsn = const String.fromEnvironment(
+        'SENTRY_DSN',
+        defaultValue: '', // vacío en dev — sin telemetría
+      );
+      options.tracesSampleRate = 0.2; // 20% de transacciones
+      options.environment = const String.fromEnvironment(
+        'APP_ENV',
+        defaultValue: 'development',
+      );
+      options.debug = false;
+    },
+    appRunner: () => runApp(
+      ProviderScope(
+        overrides: [
+          appDatabaseProvider.overrideWithValue(database),
+        ],
+        child: const KakeiboApp(),
+      ),
     ),
   );
 }
@@ -105,7 +156,9 @@ class _KakeiboAppState extends ConsumerState<KakeiboApp> {
         GoRoute(
           path: '/dashboard',
           name: 'dashboard',
-          builder: (_, __) => const HomeScreen(),
+          builder: (_, __) => PlatformUtils.useRailNavigation
+              ? const WindowsHomeScreen()
+              : const HomeScreen(),
         ),
         GoRoute(
           path: '/sobres/crear',
@@ -156,6 +209,97 @@ class _KakeiboAppState extends ConsumerState<KakeiboApp> {
           builder: (context, state) {
             final transaction = state.extra as Transaction;
             return EditTransactionPage(transaction: transaction);
+          },
+        ),
+        GoRoute(
+          path: '/sobres/:envelopeId/importar-csv',
+          name: 'importar-csv',
+          builder: (context, state) {
+            final envelopeId = state.pathParameters['envelopeId'] ?? '';
+            final familyId = state.uri.queryParameters['familyId'] ?? '';
+            final envelopeName =
+                state.uri.queryParameters['envelopeName'] ?? '';
+            final registeredBy =
+                state.uri.queryParameters['userId'] ?? '';
+            return CsvImportPage(
+              envelopeId: envelopeId,
+              envelopeName: envelopeName,
+              familyId: familyId,
+              registeredBy: registeredBy,
+            );
+          },
+        ),
+        GoRoute(
+          path: '/kakeibo/reflexion',
+          name: 'kakeibo-reflexion',
+          builder: (context, state) {
+            final extra = (state.extra as Map<String, dynamic>?) ?? {};
+            final familyId = extra['familyId'] as String? ?? '';
+            final incomeTotal = extra['incomeTotal'] as double? ?? 0.0;
+            final expenseTotal = extra['expenseTotal'] as double? ?? 0.0;
+            return KakeiboReflectionPage(
+              familyId: familyId,
+              incomeTotal: incomeTotal,
+              expenseTotal: expenseTotal,
+            );
+          },
+        ),
+        GoRoute(
+          path: '/metas',
+          name: 'metas',
+          builder: (context, state) {
+            final familyId = state.uri.queryParameters['familyId'] ?? '';
+            return SavingsGoalsPage(familyId: familyId);
+          },
+        ),
+        GoRoute(
+          path: '/correos/gmail',
+          name: 'correos-gmail',
+          builder: (context, state) => const GmailConnectPage(),
+        ),
+        GoRoute(
+          path: '/correos/pendientes',
+          name: 'correos-pendientes',
+          builder: (context, state) => const EmailTransactionsPage(),
+        ),
+        GoRoute(
+          path: '/correos/outlook',
+          name: 'correos-outlook',
+          builder: (context, state) => const OutlookConnectPage(),
+        ),
+        GoRoute(
+          path: '/chat',
+          name: 'chat',
+          builder: (context, state) => const ChatPage(),
+        ),
+        GoRoute(
+          path: '/sobres/:envelopeId/ocr',
+          name: 'ocr-captura',
+          builder: (context, state) {
+            final envelopeId = state.pathParameters['envelopeId'] ?? '';
+            final familyId =
+                state.uri.queryParameters['familyId'] ?? '';
+            return OcrCapturePage(
+                envelopeId: envelopeId, familyId: familyId);
+          },
+        ),
+        GoRoute(
+          path: '/teen-home',
+          name: 'teen-home',
+          builder: (_, __) => const TeenHomeScreen(),
+        ),
+        GoRoute(
+          path: '/settings',
+          name: 'settings',
+          builder: (_, __) => const SettingsPage(),
+        ),
+        GoRoute(
+          path: '/paywall',
+          name: 'paywall',
+          builder: (context, state) {
+            final feature =
+                state.uri.queryParameters['feature'] ?? 'Premium';
+            return PaywallPage(featureName: feature);
           },
         ),
       ],

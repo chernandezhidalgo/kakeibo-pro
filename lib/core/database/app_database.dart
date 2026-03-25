@@ -11,10 +11,12 @@ import 'tables/envelopes_table.dart';
 import 'tables/transactions_table.dart';
 import 'tables/family_members_table.dart';
 import 'tables/kakeibo_reflections_table.dart';
+import 'tables/savings_goals_table.dart';
 import 'tables/sync_queue_table.dart';
 import 'tables/user_profiles_table.dart';
 import 'daos/envelopes_dao.dart';
 import 'daos/transactions_dao.dart';
+import 'daos/savings_goals_dao.dart';
 import 'daos/sync_queue_dao.dart';
 import 'daos/user_profiles_dao.dart';
 
@@ -26,12 +28,14 @@ part 'app_database.g.dart';
     TransactionsTable,
     FamilyMembersTable,
     KakeiboReflectionsTable,
+    SavingsGoalsTable,
     SyncQueueTable,
     UserProfilesTable,
   ],
   daos: [
     EnvelopesDao,
     TransactionsDao,
+    SavingsGoalsDao,
     SyncQueueDao,
     UserProfilesDao,
   ],
@@ -40,7 +44,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super._openConnection);
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
 
   @override
   MigrationStrategy get migration {
@@ -49,8 +53,10 @@ class AppDatabase extends _$AppDatabase {
         await m.createAll();
       },
       onUpgrade: (m, from, to) async {
-        // Migraciones futuras se agregan aquí por número de versión.
-        // Ejemplo: if (from < 2) { await m.addColumn(envelopesTable, envelopesTable.newColumn); }
+        // v1 → v2: tabla de metas de ahorro
+        if (from < 2) {
+          await m.createTable(savingsGoalsTable);
+        }
       },
       beforeOpen: (details) async {
         // Activa claves foráneas en SQLite/SQLCipher

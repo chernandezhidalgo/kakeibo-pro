@@ -1,0 +1,58 @@
+name: Build Windows (MSIX)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build MSIX for Microsoft Store
+    runs-on: windows-latest
+
+    steps:
+      # 1. Código fuente
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 2. Flutter estable
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.41.5'
+          channel: stable
+          cache: true
+
+      # 3. Dependencias Dart
+      - name: Install dependencies
+        run: flutter pub get
+
+      # 4. Reconstruir código generado
+      - name: Run build_runner
+        run: dart run build_runner build --delete-conflicting-outputs
+
+      # 5. Análisis estático
+      - name: Flutter analyze
+        run: flutter analyze
+
+      # 6. Build Windows release
+      - name: Build Windows release
+        run: flutter build windows --release `
+          --dart-define=SUPABASE_URL=${{ secrets.SUPABASE_URL }} `
+          --dart-define=SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }} `
+          --dart-define=REVENUECAT_API_KEY=${{ secrets.REVENUECAT_API_KEY }} `
+          --dart-define=SENTRY_DSN=${{ secrets.SENTRY_DSN }} `
+          --dart-define=APP_ENV=production
+
+      # 7. Crear paquete MSIX
+      # Requiere configurar msix_config en pubspec.yaml con publisher real de Partner Center
+      - name: Create MSIX package
+        run: dart run msix:create
+
+      # 8. Subir MSIX como artefacto
+      - name: Upload MSIX artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kakeibopro-msix-${{ github.sha }}
+          path: build/windows/x64/runner/Release/*.msix
+          retention-days: 30

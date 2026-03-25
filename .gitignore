@@ -47,3 +47,8 @@ app.*.map.json
 # Variables de entorno
 .env
 *.env
+
+# Keystore y credenciales de firma (NUNCA subir a GitHub)
+*.jks
+*.keystore
+android/key.properties

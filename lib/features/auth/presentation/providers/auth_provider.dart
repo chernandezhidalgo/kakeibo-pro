@@ -57,3 +57,10 @@ SignOutUseCase signOutUseCase(SignOutUseCaseRef ref) {
 Stream<KakeiboUser?> authState(AuthStateRef ref) {
   return ref.watch(authRepositoryProvider).authStateChanges;
 }
+
+/// ID del usuario autenticado actualmente.
+/// Devuelve cadena vacía si aún no hay sesión activa.
+/// Usar como: `ref.watch(currentUserIdProvider)`
+final currentUserIdProvider = Provider<String>((ref) {
+  return ref.watch(authStateProvider).valueOrNull?.id ?? '';
+});

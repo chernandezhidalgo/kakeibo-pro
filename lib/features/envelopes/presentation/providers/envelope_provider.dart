@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kakeibo_pro/core/database/database_provider.dart';
+import 'package:kakeibo_pro/core/notifications/notification_service.dart';
 import 'package:kakeibo_pro/core/sync/sync_repository.dart';
 import 'package:kakeibo_pro/features/envelopes/data/repositories/envelope_repository_impl.dart';
 import 'package:kakeibo_pro/features/envelopes/domain/entities/envelope.dart';
@@ -59,4 +60,26 @@ final envelopeSummaryProvider = Provider.family<
     loading: () => (totalBudget: 0.0, totalSpent: 0.0),
     error: (_, __) => (totalBudget: 0.0, totalSpent: 0.0),
   );
+});
+
+/// Observa los sobres de una familia y dispara notificaciones locales
+/// cuando alguno supera el 100% de su presupuesto mensual.
+///
+/// Este provider no devuelve ningún valor útil — su efecto es el side-effect
+/// de enviar la notificación. Activarlo con `ref.watch(budgetAlertProvider(familyId))`.
+final budgetAlertProvider =
+    Provider.autoDispose.family<void, String>((ref, familyId) {
+  final asyncEnvelopes = ref.watch(envelopesProvider(familyId));
+  asyncEnvelopes.whenData((envelopes) {
+    for (final envelope in envelopes) {
+      if (envelope.isOverBudget) {
+        final pct = envelope.spentPercentage.toStringAsFixed(0);
+        NotificationService.instance.showLocalNotification(
+          id: envelope.id.hashCode,
+          title: '${envelope.iconEmoji} ${envelope.name} excedido',
+          body: 'Llevas $pct% de tu presupuesto mensual en este sobre.',
+        );
+      }
+    }
+  });
 });
