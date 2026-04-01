@@ -1,8 +1,9 @@
 import 'dart:math' show Random;
 
 import 'package:drift/drift.dart';
-import 'package:drift_flutter/drift_flutter.dart';
 import 'package:flutter/foundation.dart';
+
+import 'database_connection.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
@@ -67,37 +68,18 @@ class AppDatabase extends _$AppDatabase {
 
   /// Abre la base de datos con nombre 'kakeibo_pro'.
   ///
-  /// ⚠️ ESTADO: Por ahora usa driftDatabase() estándar de drift_flutter.
-  /// La integración de encriptación con SQLCipher requiere verificar la API
-  /// exacta según la versión instalada. Ver:
-  /// https://drift.simonbinder.eu/docs/platforms/encryption/
-  ///
-  /// Una vez confirmada la API, se deberá pasar la clave obtenida de
-  /// [_getOrCreateEncryptionKey()] al conector nativo de SQLCipher.
+  /// En plataformas nativas usa SQLCipher con una clave de 256 bits
+  /// almacenada en [FlutterSecureStorage]. En web usa WasmDatabase.
   static Future<AppDatabase> open() async {
-    // En plataformas nativas preparamos la clave de encriptación (SQLCipher).
-    // En web este paso se omite porque FlutterSecureStorage no está disponible.
+    String? encryptionKey;
     if (!kIsWeb) {
-      await _getOrCreateEncryptionKey();
+      encryptionKey = await _getOrCreateEncryptionKey();
     }
-
-    return AppDatabase(
-      driftDatabase(
-        name: 'kakeibo_pro',
-        web: DriftWebOptions(
-          sqlite3Wasm: Uri.parse('sqlite3.wasm'),
-          driftWorker: Uri.parse('drift_worker.js'),
-          onResult: (result) {
-            if (result.missingFeatures.isNotEmpty) {
-              debugPrint(
-                'Drift web: usando implementación de respaldo '
-                'por falta de: ${result.missingFeatures}',
-              );
-            }
-          },
-        ),
-      ),
+    final executor = await openDatabaseConnection(
+      'kakeibo_pro',
+      encryptionKey: encryptionKey,
     );
+    return AppDatabase(executor);
   }
 
   /// Genera y persiste una clave de 256 bits usando [Random.secure()].

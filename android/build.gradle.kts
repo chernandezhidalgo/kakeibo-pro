@@ -4,44 +4,48 @@ allprojects {
         mavenCentral()
     }
 }
-
 val newBuildDir: Directory =
     rootProject.layout.buildDirectory
         .dir("../../build")
         .get()
 rootProject.layout.buildDirectory.value(newBuildDir)
-
 subprojects {
     val newSubprojectBuildDir: Directory = newBuildDir.dir(project.name)
     project.layout.buildDirectory.value(newSubprojectBuildDir)
 }
-subprojects {
-    project.evaluationDependsOn(":app")
-}
-
 tasks.register<Delete>("clean") {
     delete(rootProject.layout.buildDirectory)
 }
-
-// Workaround para paquetes de terceros desactualizados (ej. msal_flutter):
-//  1. AGP 8.x requiere 'namespace' — se asigna automáticamente desde el group.
-//  2. Kotlin 2.x compila en JVM 21 por defecto; si el paquete declara Java 1.8
-//     el build falla por incompatibilidad. Se fuerza JVM 17 (igual que :app).
 subprojects {
+    val skipAll = listOf("sqlcipher_flutter_libs")
     plugins.withId("com.android.library") {
         configure<com.android.build.gradle.LibraryExtension> {
             if (namespace == null) {
                 namespace = project.group.toString()
             }
-            compileOptions {
-                sourceCompatibility = JavaVersion.VERSION_17
-                targetCompatibility = JavaVersion.VERSION_17
-            }
         }
     }
-    tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
-        compilerOptions {
-            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+    afterEvaluate {
+        if (project.name !in skipAll) {
+            plugins.withId("com.android.library") {
+                configure<com.android.build.gradle.LibraryExtension> {
+                    compileOptions {
+                        sourceCompatibility = JavaVersion.VERSION_17
+                        targetCompatibility = JavaVersion.VERSION_17
+                    }
+                }
+            }
+            tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+                compilerOptions {
+                    jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+                    languageVersion.set(org.jetbrains.kotlin.gradle.dsl.KotlinVersion.KOTLIN_1_9)
+                    apiVersion.set(org.jetbrains.kotlin.gradle.dsl.KotlinVersion.KOTLIN_1_9)
+                }
+            }
+            tasks.withType<JavaCompile>().configureEach {
+                sourceCompatibility = JavaVersion.VERSION_17.toString()
+                targetCompatibility = JavaVersion.VERSION_17.toString()
+            }
         }
     }
 }

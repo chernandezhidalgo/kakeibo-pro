@@ -6,12 +6,12 @@ plugins {
     id("kotlin-android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
-    // Google Services — necesario para FCM. Requiere google-services.json en android/app/.
-    // ⚠️ Paso manual: descarga google-services.json desde Firebase Console y colócalo aquí.
+    // Google Services Ã¢â‚¬â€ necesario para FCM. Requiere google-services.json en android/app/.
+    // Ã¢Å¡Â Ã¯Â¸Â Paso manual: descarga google-services.json desde Firebase Console y colÃƒÂ³calo aquÃƒÂ­.
     id("com.google.gms.google-services")
 }
 
-// ── Lectura de key.properties (solo si el archivo existe) ─────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬ Lectura de key.properties (solo si el archivo existe) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 val keyPropertiesFile = rootProject.file("key.properties")
 val keyProperties = Properties()
 if (keyPropertiesFile.exists()) {
@@ -20,12 +20,13 @@ if (keyPropertiesFile.exists()) {
 
 android {
     namespace = "com.hernandezromero.kakeibo_pro"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        isCoreLibraryDesugaringEnabled = true
     }
 
     kotlinOptions {
@@ -35,13 +36,13 @@ android {
     defaultConfig {
         applicationId = "com.hernandezromero.kakeibo_pro"
         minSdk = flutter.minSdkVersion
-        targetSdk = flutter.targetSdkVersion
+        targetSdk = 36
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
 
     signingConfigs {
-        // Configuración de firma para release.
+        // ConfiguraciÃƒÂ³n de firma para release.
         // Requiere android/key.properties con: storeFile, storePassword, keyAlias, keyPassword
         // En CI/CD estas variables las provee el workflow de GitHub Actions.
         if (keyPropertiesFile.exists()) {
@@ -60,10 +61,18 @@ android {
                 signingConfigs.getByName("release")
             else
                 signingConfigs.getByName("debug") // fallback para builds locales sin keystore
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
         }
     }
 }
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }

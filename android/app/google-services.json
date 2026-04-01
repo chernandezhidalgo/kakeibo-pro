@@ -7,9 +7,9 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:230500655411:android:a38c4374fc5299aaef5e46",
+        "mobilesdk_app_id": "1:230500655411:android:e95ca94ee3712f28ef5e46",
         "android_client_info": {
-          "package_name": "com.kakeibopro.app"
+          "package_name": "com.hernandezromero.kakeibo_pro"
         }
       },
       "oauth_client": [],

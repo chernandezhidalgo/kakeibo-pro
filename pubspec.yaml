@@ -1,5 +1,5 @@
-name: kakeibo_pro
-description: KakeiboPro — App de finanzas familiares para la familia Hernandez-Romero
+﻿name: kakeibo_pro
+description: KakeiboPro - App de finanzas familiares para la familia Hernandez-Romero
 publish_to: 'none'
 version: 1.0.0+1
 
@@ -19,9 +19,7 @@ dependencies:
 
   # Base de datos local
   drift: ^2.22.1
-  drift_flutter: ^0.2.4
-  # SQLCipher reemplaza sqlite3_flutter_libs para encriptación en reposo
-  sqlcipher_flutter_libs: ^0.5.4
+  sqlcipher_flutter_libs: ^0.5.7
   sqlite3: ^2.7.0
   path_provider: ^2.1.5
   path: ^1.9.0
@@ -34,7 +32,7 @@ dependencies:
   local_auth: ^2.3.0
 
   # Sync en background
-  workmanager: ^0.5.2
+  workmanager: ^0.9.0
 
   # UI
   cupertino_icons: ^1.0.8
@@ -57,11 +55,11 @@ dependencies:
   json_annotation: ^4.9.0
   logger: ^2.5.0
 
-  # Importación de archivos (CSV)
+  # Importacion de archivos (CSV)
   file_picker: ^8.1.2
 
   # Monitoreo de errores
-  sentry_flutter: ^8.12.0
+  sentry_flutter: ^8.14.2
   http: ^1.6.0
   google_sign_in: ^6.2.0
   extension_google_sign_in_as_googleapis_auth: ^2.0.0
@@ -93,11 +91,11 @@ flutter:
 
 msix_config:
   display_name: KakeiboPro
-  publisher_display_name: Carlos Hernández
+  publisher_display_name: Carlos Hernandez
   identity_name: CarlosHernandez.KakeiboPro
   msix_version: 1.0.0.0
-  description: Finanzas familiares con el método Kakeibo
-  publisher: CN=TU_PUBLISHER_ID  # obtener de Partner Center → App identity
+  description: Finanzas familiares con el metodo Kakeibo
+  publisher: CN=TU_PUBLISHER_ID
   languages: es-CR, es, en-US
   capabilities: internetClient
   icons_background_color: transparent
