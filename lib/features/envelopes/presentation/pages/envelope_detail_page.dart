@@ -323,7 +323,19 @@ class _DetailContent extends ConsumerWidget {
                     onDismissed: (_) {
                       ref
                           .read(deleteTransactionUseCaseProvider)
-                          .call(tx.id);
+                          .call(tx.id)
+                          .then((result) {
+                        if (result.failure != null && context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                'Error al eliminar: ${result.failure}',
+                              ),
+                              backgroundColor: AppColors.error,
+                            ),
+                          );
+                        }
+                      });
                     },
                     background: _DeleteBackground(),
                     child: _TransactionTile(
@@ -469,7 +481,7 @@ Future<bool> _confirmDelete(BuildContext context, Transaction tx) async {
   final confirmed = await showDialog<bool>(
     context: context,
     builder: (ctx) => AlertDialog(
-      backgroundColor: const Color(0xFF1E1E1E),
+      backgroundColor: AppColors.surface,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       title: const Text(
         'Eliminar movimiento',
