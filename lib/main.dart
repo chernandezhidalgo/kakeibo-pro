@@ -85,8 +85,10 @@ Future<void> main() async {
     ConnectivityListener.start();
   }
 
-  // 6. Sentry — envuelve runApp para capturar crashes y performance.
+  // 6. Sentry — inicializa monitoreo de errores y performance.
   //    SENTRY_DSN vacío en desarrollo = Sentry silencioso (sin enviar datos).
+  //    NOTA: Se usa sin appRunner para evitar el Zone mismatch con el binding
+  //    que ya fue inicializado en la zona raíz (línea 1 del main).
   await SentryFlutter.init(
     (options) {
       options.dsn = const String.fromEnvironment(
@@ -100,13 +102,15 @@ Future<void> main() async {
       );
       options.debug = false;
     },
-    appRunner: () => runApp(
-      ProviderScope(
-        overrides: [
-          appDatabaseProvider.overrideWithValue(database),
-        ],
-        child: const KakeiboApp(),
-      ),
+  );
+
+  // runApp se ejecuta en la misma zona donde se llamó ensureInitialized().
+  runApp(
+    ProviderScope(
+      overrides: [
+        appDatabaseProvider.overrideWithValue(database),
+      ],
+      child: const KakeiboApp(),
     ),
   );
 }

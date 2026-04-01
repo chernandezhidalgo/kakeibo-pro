@@ -44,9 +44,10 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 
-# Variables de entorno
+# Variables de entorno y scripts locales con credenciales
 .env
 *.env
+run_dev.bat
 
 # Keystore y credenciales de firma (NUNCA subir a GitHub)
 *.jks
