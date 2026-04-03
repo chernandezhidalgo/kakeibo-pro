@@ -58,3 +58,7 @@ android/app/*.keystore
 android/key.properties
 
 .claude/
+
+*.jks
+*.keystore
+android/key.properties
