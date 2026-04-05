@@ -1,0 +1,5 @@
+# Microsoft Store — Package Identity
+# Usar en windows/runner/Package.appxmanifest cuando se configure MSIX
+Package_Name=CHERNANEZH.176053EC6CA7A
+Package_Publisher=CN=D957F064-CC18-4AA8-85C5-36637EBEF42F
+PublisherDisplayName=CHERNANEZH
