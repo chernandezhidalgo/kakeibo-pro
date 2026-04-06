@@ -59,6 +59,13 @@ android/key.properties
 
 .claude/
 
+# Credenciales y claves (entradas consolidadas)
 *.jks
 *.keystore
 android/key.properties
+**/google-services.json
+**/GoogleService-Info.plist
+.env.*
+*_credentials.json
+*adminsdk*.json
+_credenciales/
