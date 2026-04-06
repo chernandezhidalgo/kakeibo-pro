@@ -10,6 +10,11 @@ val newBuildDir: Directory =
         .get()
 rootProject.layout.buildDirectory.value(newBuildDir)
 subprojects {
+    configurations.all {
+        resolutionStrategy {
+            force("com.google.android.material:material:1.12.0")
+        }
+    }
     val newSubprojectBuildDir: Directory = newBuildDir.dir(project.name)
     project.layout.buildDirectory.value(newSubprojectBuildDir)
 }
@@ -17,6 +22,11 @@ tasks.register<Delete>("clean") {
     delete(rootProject.layout.buildDirectory)
 }
 subprojects {
+    configurations.all {
+        resolutionStrategy {
+            force("com.google.android.material:material:1.12.0")
+        }
+    }
     val skipAll = listOf("sqlcipher_flutter_libs")
     plugins.withId("com.android.library") {
         configure<com.android.build.gradle.LibraryExtension> {
@@ -26,6 +36,14 @@ subprojects {
         }
     }
     afterEvaluate {
+        // compileSdk = 36 se aplica a TODOS los plugins (incluido sqlcipher_flutter_libs)
+        // para que AAPT encuentre android:attr/lStar (introducido en API 31)
+        plugins.withId("com.android.library") {
+            configure<com.android.build.gradle.LibraryExtension> {
+                compileSdk = 36
+            }
+        }
+        // JVM 17 solo para plugins que lo soportan (sqlcipher usa su propia toolchain nativa)
         if (project.name !in skipAll) {
             plugins.withId("com.android.library") {
                 configure<com.android.build.gradle.LibraryExtension> {
@@ -49,3 +67,4 @@ subprojects {
         }
     }
 }
+
