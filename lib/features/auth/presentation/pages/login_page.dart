@@ -159,7 +159,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
               decoration: _inputDecoration('Correo electrónico', Icons.email_outlined),
               validator: (v) {
                 if (v == null || v.trim().isEmpty) return 'Ingresa tu correo';
-                if (!v.contains('@')) return 'Correo no válido';
+                final emailRegex = RegExp(r'^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$');
+                if (!emailRegex.hasMatch(v.trim())) return 'Correo no válido';
                 return null;
               },
             ),

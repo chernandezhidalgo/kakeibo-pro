@@ -1,3 +1,4 @@
+import 'dart:async' show unawaited;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/widgets.dart';
 import 'package:local_auth/local_auth.dart';
@@ -67,7 +68,7 @@ class Biometric extends _$Biometric with WidgetsBindingObserver {
     ref.onDispose(() => WidgetsBinding.instance.removeObserver(this));
 
     // Verificar soporte de forma asíncrona sin bloquear build()
-    _checkSupport();
+    unawaited(_checkSupport());
 
     return const BiometricState(
       isSupported: false,

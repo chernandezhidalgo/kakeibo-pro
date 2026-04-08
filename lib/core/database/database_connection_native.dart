@@ -14,7 +14,7 @@ Future<QueryExecutor> openDatabaseConnection(
   return NativeDatabase.createInBackground(
     File(dbPath),
     setup: encryptionKey != null
-        ? (db) => db.execute("PRAGMA key = '$encryptionKey'")
+        ? (db) => db.execute('PRAGMA key = ?', [encryptionKey])
         : null,
   );
 }

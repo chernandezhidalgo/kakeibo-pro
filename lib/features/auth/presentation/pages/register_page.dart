@@ -126,7 +126,8 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
               decoration: _inputDecoration('Correo electrónico', Icons.email_outlined),
               validator: (v) {
                 if (v == null || v.trim().isEmpty) return 'Ingresa tu correo';
-                if (!v.contains('@')) return 'Correo no válido';
+                final emailRegex = RegExp(r'^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$');
+                if (!emailRegex.hasMatch(v.trim())) return 'Correo no válido';
                 return null;
               },
             ),
@@ -151,6 +152,8 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
               validator: (v) {
                 if (v == null || v.isEmpty) return 'Ingresa una contraseña';
                 if (v.length < 8) return 'Mínimo 8 caracteres';
+                if (!RegExp(r'[A-Z]').hasMatch(v)) return 'Debe contener al menos una mayúscula';
+                if (!RegExp(r'[0-9]').hasMatch(v)) return 'Debe contener al menos un número';
                 return null;
               },
             ),

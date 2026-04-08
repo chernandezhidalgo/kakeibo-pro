@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:drift/drift.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:logger/logger.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../database/app_database.dart';
 import '../database/database_provider.dart';
@@ -8,6 +9,7 @@ import '../database/database_provider.dart';
 class SyncService {
   final AppDatabase _db;
   final SupabaseClient _supabase;
+  final _log = Logger();
 
   SyncService({required AppDatabase db, required SupabaseClient supabase})
       : _db = db,
@@ -24,7 +26,19 @@ class SyncService {
 
     for (final op in pending) {
       try {
-        final payload = jsonDecode(op.payload) as Map<String, dynamic>;
+        Map<String, dynamic> payload;
+        try {
+          final decoded = jsonDecode(op.payload);
+          if (decoded is! Map<String, dynamic>) {
+            throw const FormatException('Payload no es un objeto JSON válido');
+          }
+          payload = decoded;
+        } on FormatException catch (e) {
+          _log.e('Payload malformado en cola id=${op.id}: $e');
+          await _db.syncQueueDao.markFailed(op.id, 'Payload inválido: $e');
+          failed++;
+          continue;
+        }
 
         switch (op.operationType) {
           case 'INSERT':
@@ -43,6 +57,7 @@ class SyncService {
         await _db.syncQueueDao.markDone(op.id);
         synced++;
       } catch (e) {
+        _log.e('Error sincronizando op id=${op.id} (${op.operationType} ${op.tableName_}): $e');
         await _db.syncQueueDao.markFailed(op.id, e.toString());
         failed++;
         // No detenemos el loop — seguimos con las demás operaciones
@@ -67,8 +82,7 @@ class SyncService {
           .eq('family_id', familyId)
           .gte('updated_at', since.toIso8601String());
 
-      for (final row in rows as List<dynamic>) {
-        final map = row as Map<String, dynamic>;
+      for (final map in rows) {
         await _db.envelopesDao.upsertEnvelope(
           EnvelopesTableCompanion.insert(
             id: map['id'] as String,
@@ -89,8 +103,7 @@ class SyncService {
       }
     } catch (e) {
       // Best-effort: el pull no debe bloquear la app
-      // TODO: integrar Sentry cuando esté disponible
-      rethrow;
+      _log.w('Pull de envelopes falló (non-fatal): $e');
     }
   }
 
@@ -102,8 +115,7 @@ class SyncService {
           .eq('family_id', familyId)
           .gte('updated_at', since.toIso8601String());
 
-      for (final row in rows as List<dynamic>) {
-        final map = row as Map<String, dynamic>;
+      for (final map in rows) {
         await _db.transactionsDao.upsertTransaction(
           TransactionsTableCompanion.insert(
             id: map['id'] as String,
@@ -125,7 +137,7 @@ class SyncService {
         );
       }
     } catch (e) {
-      rethrow;
+      _log.w('Pull de transacciones falló (non-fatal): $e');
     }
   }
 }

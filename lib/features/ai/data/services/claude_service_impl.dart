@@ -10,8 +10,40 @@ class ClaudeServiceImpl {
       String.fromEnvironment('ANTHROPIC_API_KEY', defaultValue: '');
   static const _model = 'claude-sonnet-4-6';
 
+  /// Extrae el texto de la primera respuesta del modelo de forma segura.
+  String _extractText(Map<String, dynamic> body) {
+    final content = body['content'];
+    if (content is! List || content.isEmpty) {
+      throw Exception('Respuesta de Claude sin contenido');
+    }
+    final first = content.first;
+    if (first is! Map || first['text'] is! String) {
+      throw Exception('Formato de respuesta de Claude inesperado');
+    }
+    return first['text'] as String;
+  }
+
+  /// Extrae el primer objeto JSON completo del texto de forma no-greedy.
+  Map<String, dynamic> _extractJson(String text) {
+    final jsonMatch = RegExp(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)?\}').firstMatch(text)
+        ?? RegExp(r'\{[\s\S]*?\}').firstMatch(text);
+    if (jsonMatch == null) throw Exception('Respuesta inesperada de Claude: sin JSON');
+    final decoded = jsonDecode(jsonMatch.group(0)!);
+    if (decoded is! Map<String, dynamic>) {
+      throw Exception('JSON de respuesta no es un objeto');
+    }
+    return decoded;
+  }
+
+  void _checkApiKey() {
+    if (_apiKey.isEmpty) {
+      throw Exception('ANTHROPIC_API_KEY no configurada. Define la variable de entorno al compilar.');
+    }
+  }
+
   Future<AiCategorizationResponse> categorize(
       AiCategorizationRequest request) async {
+    _checkApiKey();
     final envelopeList = request.availableEnvelopes
         .map((e) =>
             '- id: ${e.id} | nombre: ${e.name} | categoría: ${e.category} | emoji: ${e.emoji}')
@@ -58,14 +90,8 @@ Responde ÚNICAMENTE con un objeto JSON con este formato exacto:
     }
 
     final body = jsonDecode(response.body) as Map<String, dynamic>;
-    final text =
-        (body['content'] as List).first['text'] as String;
-
-    // Extraer JSON de la respuesta (puede venir rodeado de texto)
-    final jsonMatch = RegExp(r'\{[\s\S]*\}').firstMatch(text);
-    if (jsonMatch == null) throw Exception('Respuesta inesperada de Claude');
-    final json = jsonDecode(jsonMatch.group(0)!) as Map<String, dynamic>;
-
+    final text = _extractText(body);
+    final json = _extractJson(text);
     return AiCategorizationResponse.fromJson(json);
   }
 
@@ -80,6 +106,7 @@ Responde ÚNICAMENTE con un objeto JSON con este formato exacto:
     required String q4,
     required Map<String, double> spentByCategory,
   }) async {
+    _checkApiKey();
     final categoryLines = spentByCategory.entries
         .map((e) => '- ${e.key}: ${e.value.toStringAsFixed(2)}')
         .join('\n');
@@ -131,13 +158,8 @@ Responde ÚNICAMENTE con un objeto JSON con este formato exacto:
     }
 
     final body = jsonDecode(response.body) as Map<String, dynamic>;
-    final text =
-        (body['content'] as List).first['text'] as String;
-
-    final jsonMatch = RegExp(r'\{[\s\S]*\}').firstMatch(text);
-    if (jsonMatch == null) throw Exception('Respuesta inesperada de Claude');
-    final json = jsonDecode(jsonMatch.group(0)!) as Map<String, dynamic>;
-
+    final text = _extractText(body);
+    final json = _extractJson(text);
     return AiReflectionInsight.fromJson(json);
   }
 
@@ -146,6 +168,7 @@ Responde ÚNICAMENTE con un objeto JSON con este formato exacto:
     required String mediaType,
     required List<EnvelopeOption> availableEnvelopes,
   }) async {
+    _checkApiKey();
     final envelopeList = availableEnvelopes
         .map((e) =>
             '- id: ${e.id} | nombre: ${e.name} | categoría: ${e.category}')
@@ -205,13 +228,8 @@ Responde ÚNICAMENTE con un objeto JSON:
     }
 
     final body = jsonDecode(response.body) as Map<String, dynamic>;
-    final text =
-        (body['content'] as List).first['text'] as String;
-
-    final jsonMatch = RegExp(r'\{[\s\S]*\}').firstMatch(text);
-    if (jsonMatch == null) throw Exception('Respuesta inesperada de Claude');
-    final json = jsonDecode(jsonMatch.group(0)!) as Map<String, dynamic>;
-
+    final text = _extractText(body);
+    final json = _extractJson(text);
     return AiCategorizationResponse.fromJson(json);
   }
 }

@@ -22,11 +22,7 @@ class _SetupFamilyPageState extends ConsumerState<SetupFamilyPage> {
   @override
   void initState() {
     super.initState();
-    _nameController = TextEditingController(
-      text: AppStrings.appName == 'KakeiboPro'
-          ? 'Familia Hernández-Romero'
-          : 'Mi Familia',
-    );
+    _nameController = TextEditingController(text: 'Mi Familia');
   }
 
   @override

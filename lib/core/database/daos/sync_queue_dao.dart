@@ -43,13 +43,17 @@ class SyncQueueDao extends DatabaseAccessor<AppDatabase>
     ));
   }
 
-  // Marcar como fallida con motivo
-  Future<void> markFailed(int queueId, String error) {
-    return (update(syncQueueTable)..where((t) => t.id.equals(queueId)))
+  // Marcar como fallida con motivo, incrementando el contador de intentos
+  Future<void> markFailed(int queueId, String error) async {
+    final row = await (select(syncQueueTable)
+          ..where((t) => t.id.equals(queueId)))
+        .getSingleOrNull();
+    final currentCount = row?.attemptCount ?? 0;
+    await (update(syncQueueTable)..where((t) => t.id.equals(queueId)))
         .write(SyncQueueTableCompanion(
       status: const Value('failed'),
       lastError: Value(error),
-      attemptCount: const Value(1), // TODO: incrementar en lugar de fijar
+      attemptCount: Value(currentCount + 1),
     ));
   }
 

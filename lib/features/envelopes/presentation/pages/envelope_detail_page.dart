@@ -320,22 +320,20 @@ class _DetailContent extends ConsumerWidget {
                     direction: DismissDirection.endToStart,
                     // Mostrar diálogo antes de confirmar el deslizamiento
                     confirmDismiss: (_) => _confirmDelete(context, tx),
-                    onDismissed: (_) {
-                      ref
+                    onDismissed: (_) async {
+                      final result = await ref
                           .read(deleteTransactionUseCaseProvider)
-                          .call(tx.id)
-                          .then((result) {
-                        if (result.failure != null && context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                'Error al eliminar: ${result.failure}',
-                              ),
-                              backgroundColor: AppColors.error,
+                          .call(tx.id);
+                      if (result.failure != null && context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              'Error al eliminar: ${result.failure}',
                             ),
-                          );
-                        }
-                      });
+                            backgroundColor: AppColors.error,
+                          ),
+                        );
+                      }
                     },
                     background: _DeleteBackground(),
                     child: _TransactionTile(

@@ -47,10 +47,10 @@ class SupabaseAuthDatasource {
       return (data: _mapUser(user), failure: null);
     } on AuthException catch (e) {
       return (data: null, failure: AuthFailure(e.message));
-    } catch (e) {
+    } catch (_) {
       return (
         data: null,
-        failure: AuthFailure('Error inesperado al iniciar sesión: $e'),
+        failure: const AuthFailure('Error inesperado al iniciar sesión. Intenta de nuevo.'),
       );
     }
   }
@@ -76,10 +76,10 @@ class SupabaseAuthDatasource {
       return (data: _mapUser(user), failure: null);
     } on AuthException catch (e) {
       return (data: null, failure: AuthFailure(e.message));
-    } catch (e) {
+    } catch (_) {
       return (
         data: null,
-        failure: AuthFailure('Error inesperado al registrarse: $e'),
+        failure: const AuthFailure('Error inesperado al registrarse. Intenta de nuevo.'),
       );
     }
   }
@@ -90,10 +90,10 @@ class SupabaseAuthDatasource {
       return (data: Unit.value, failure: null);
     } on AuthException catch (e) {
       return (data: null, failure: AuthFailure(e.message));
-    } catch (e) {
+    } catch (_) {
       return (
         data: null,
-        failure: AuthFailure('Error al cerrar sesión: $e'),
+        failure: const AuthFailure('Error al cerrar sesión. Intenta de nuevo.'),
       );
     }
   }
@@ -102,10 +102,10 @@ class SupabaseAuthDatasource {
     try {
       final user = _client.auth.currentUser;
       return (data: user == null ? null : _mapUser(user), failure: null);
-    } catch (e) {
+    } catch (_) {
       return (
         data: null,
-        failure: AuthFailure('Error al obtener usuario actual: $e'),
+        failure: const AuthFailure('Error al obtener el usuario actual.'),
       );
     }
   }

@@ -29,7 +29,9 @@ class _EditTransactionPageState extends ConsumerState<EditTransactionPage> {
   void initState() {
     super.initState();
     final tx = widget.transaction;
-    _amountController.text = tx.amount.toInt().toString();
+    _amountController.text = tx.amount.toStringAsFixed(
+      tx.amount == tx.amount.roundToDouble() ? 0 : 2,
+    );
     _descriptionController.text = tx.description;
     _merchantController.text = tx.merchantName ?? '';
   }

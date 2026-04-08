@@ -192,7 +192,8 @@ class _KakeiboAppState extends ConsumerState<KakeiboApp> {
           builder: (context, state) {
             final familyId =
                 state.uri.queryParameters['familyId'] ?? '';
-            final envelope = state.extra as Envelope;
+            final envelope = state.extra as Envelope?;
+            if (envelope == null) return const _RouteErrorPage();
             return AddTransactionPage(
               envelope: envelope,
               familyId: familyId,
@@ -203,7 +204,8 @@ class _KakeiboAppState extends ConsumerState<KakeiboApp> {
           path: '/sobres/:envelopeId/editar',
           name: 'editar-sobre',
           builder: (context, state) {
-            final envelope = state.extra as Envelope;
+            final envelope = state.extra as Envelope?;
+            if (envelope == null) return const _RouteErrorPage();
             return EditEnvelopePage(envelope: envelope);
           },
         ),
@@ -211,7 +213,8 @@ class _KakeiboAppState extends ConsumerState<KakeiboApp> {
           path: '/sobres/:envelopeId/movimiento/:txId/editar',
           name: 'editar-movimiento',
           builder: (context, state) {
-            final transaction = state.extra as Transaction;
+            final transaction = state.extra as Transaction?;
+            if (transaction == null) return const _RouteErrorPage();
             return EditTransactionPage(transaction: transaction);
           },
         ),
@@ -405,6 +408,32 @@ class _KakeiboAppState extends ConsumerState<KakeiboApp> {
           bodySmall: TextStyle(color: AppColors.textMuted),
         ),
       );
+}
+
+// ── Route Error Fallback ──────────────────────────────────────────────────────
+
+class _RouteErrorPage extends StatelessWidget {
+  const _RouteErrorPage();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Error de navegación')),
+      body: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Datos de ruta no disponibles.'),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Volver'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 // ── Router Notifier ───────────────────────────────────────────────────────────

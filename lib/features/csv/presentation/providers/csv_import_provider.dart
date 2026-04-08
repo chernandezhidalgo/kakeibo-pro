@@ -79,12 +79,20 @@ class CsvImportNotifier extends StateNotifier<CsvImportState> {
       }
 
       final file = result.files.first;
-      String content = String.fromCharCodes(file.bytes!);
+      final bytes = file.bytes;
+      if (bytes == null || bytes.isEmpty) {
+        state = state.copyWith(
+          step: CsvImportStep.error,
+          errorMessage: 'No se pudo leer el archivo seleccionado.',
+        );
+        return;
+      }
+      String content = String.fromCharCodes(bytes);
 
       // Detectar encoding Latin-1 vs UTF-8
       if (content.contains('\uFFFD')) {
         // Fallback a latin1
-        content = String.fromCharCodes(file.bytes!.map((b) => b & 0xFF));
+        content = String.fromCharCodes(bytes.map((b) => b & 0xFF));
       }
 
       // Detección automática: intentar cada parser en orden

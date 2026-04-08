@@ -415,8 +415,13 @@ class _AddTransactionPageState extends ConsumerState<AddTransactionPage> {
   }
 
   void _save(BuildContext context, AddTransactionNotifier notifier) {
-    final userId =
-        ref.read(authStateProvider).valueOrNull?.id ?? 'unknown';
+    final userId = ref.read(authStateProvider).valueOrNull?.id;
+    if (userId == null || userId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Sesión no activa. Por favor inicia sesión.')),
+      );
+      return;
+    }
     notifier.save(userId);
   }
 
