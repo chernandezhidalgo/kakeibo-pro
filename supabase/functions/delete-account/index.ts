@@ -1,7 +1,8 @@
 // Borra la cuenta de quien llama.
-// 1. Comprueba el JWT.
-// 2. Ejecuta public.delete_my_account_data() con ese usuario
+// 1. Comprueba el JWT con la clave anónima. El uid sale de ahí.
+// 2. Ejecuta public.delete_my_account_data(p_uid) con la service role
 //    (transfiere el admin o borra la familia si estaba solo).
+//    authenticated no puede ejecutar esa función.
 // 3. Borra el usuario de Supabase Auth con la service role.
 //
 // La service role solo vive aquí. No va en la app.
@@ -58,8 +59,13 @@ Deno.serve(async (req: Request) => {
     });
   }
 
-  const { data: deleted, error: rpcError } = await userClient.rpc(
+  const admin = createClient(supabaseUrl, serviceKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+
+  const { data: deleted, error: rpcError } = await admin.rpc(
     "delete_my_account_data",
+    { p_uid: user.id },
   );
 
   if (rpcError) {
@@ -80,10 +86,6 @@ Deno.serve(async (req: Request) => {
         "No se pudo confirmar el borrado. Escribe a info.kakeibopro@gmail.com.",
     });
   }
-
-  const admin = createClient(supabaseUrl, serviceKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
 
   const { error: deleteError } = await admin.auth.admin.deleteUser(
     user.id,

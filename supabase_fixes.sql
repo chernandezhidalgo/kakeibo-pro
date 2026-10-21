@@ -22,18 +22,31 @@
 --     SECURITY DEFINER con search_path fijo. Así la política no se
 --     llama a sí misma.
 --   * Aceptar una invitación solo con accept_family_invitation(token).
+--     Un token malo y uno vencido responden el mismo texto.
+--   * Crear familia solo con create_family(nombre): inserta la familia
+--     y al admin en la misma función. No hay política de INSERT en families.
+--   * Un admin o co_admin solo puede insertar invitaciones
+--     (user_id vacío y token). El primer admin es user_id = auth.uid().
 --   * Un trigger impide cambiar role, familia o user_id si no eres admin,
---     y no deja a la familia sin administrador.
---   * delete_my_account_data() borra los datos de quien llama.
---     No borra el usuario de Auth: eso lo hace la Edge Function
---     supabase/functions/delete-account.
+--     no deja a la familia sin un admin activo, y nadie puede poner
+--     su propio is_active en true si estaba apagado.
+--   * delete_my_account_data(uid) solo la ejecuta service_role.
+--     La Edge Function pasa el uid del JWT ya verificado.
+--     No borra el usuario de Auth: eso lo hace la misma Edge Function
+--     después, con auth.admin.deleteUser.
+--   * Antes de borrar la membresía se reasignan (o se vacían, si la
+--     columna lo permite) las columnas de autoría que apunten a esa
+--     persona, aunque el nombre real de la columna no se conozca.
+--     Así un ON DELETE CASCADE no se lleva los movimientos compartidos.
+--   * Los índices se crean solo si la columna existe.
 --
 -- Qué pasa al eliminar una cuenta (la función no se ejecuta sola):
 --   * Si esa persona es la única cuenta de la familia, se borra la
 --     familia y todos sus datos.
 --   * Si hay otras cuentas, el presupuesto compartido se queda.
---     Si era el único admin, el rol pasa a otro miembro.
---     Se borran su membresía, su perfil y sus reflexiones.
+--     Si era el único admin (aunque esté inactivo), el rol pasa a otro
+--     miembro. Se borran su membresía, su perfil y sus reflexiones.
+--     Los movimientos, metas y reglas se quedan, con otro autor o sin autor.
 -- ============================================================
 
 BEGIN;
@@ -76,13 +89,18 @@ $drop_policies$;
 DROP TRIGGER IF EXISTS trg_guard_family_member_changes ON public.family_members;
 
 DROP FUNCTION IF EXISTS public.delete_my_account_data();
+DROP FUNCTION IF EXISTS public.delete_my_account_data(uuid);
+DROP FUNCTION IF EXISTS public.create_family(text);
 DROP FUNCTION IF EXISTS public.accept_family_invitation(text);
 DROP FUNCTION IF EXISTS public.guard_family_member_changes();
 DROP FUNCTION IF EXISTS public._remove_member_from_shared_family(uuid, uuid, uuid);
 DROP FUNCTION IF EXISTS public._delete_family_completely(uuid);
+DROP FUNCTION IF EXISTS public._reassign_authorship(uuid, uuid, uuid, uuid);
+DROP FUNCTION IF EXISTS public._apply_authorship_reassign(text, text, uuid, uuid);
 DROP FUNCTION IF EXISTS public._null_or_reassign(text, text, uuid, uuid);
 DROP FUNCTION IF EXISTS public._has_column(text, text);
 DROP FUNCTION IF EXISTS public.family_member_update_allowed(uuid, uuid, uuid, text, text);
+DROP FUNCTION IF EXISTS public.family_member_update_allowed(uuid, uuid, uuid, text, text, boolean);
 DROP FUNCTION IF EXISTS public.shares_family_with(uuid);
 DROP FUNCTION IF EXISTS public.family_is_empty(uuid);
 DROP FUNCTION IF EXISTS public.is_family_manager(uuid);
@@ -175,6 +193,8 @@ AS $fn$
 $fn$;
 
 -- Compara la fila NUEVA con la que ya está guardada.
+-- Nadie puede encender su propio is_active.
+-- Nadie puede dejar la familia sin un admin activo.
 -- Un admin puede cambiar roles. El resto no puede cambiar role,
 -- user_id, familia ni el token.
 CREATE OR REPLACE FUNCTION public.family_member_update_allowed(
@@ -182,7 +202,8 @@ CREATE OR REPLACE FUNCTION public.family_member_update_allowed(
   p_family_id uuid,
   p_user_id uuid,
   p_role text,
-  p_invitation_token text
+  p_invitation_token text,
+  p_is_active boolean
 )
 RETURNS boolean
 LANGUAGE sql
@@ -195,6 +216,30 @@ AS $fn$
     FROM public.family_members fm
     WHERE fm.id = p_id
       AND fm.family_id = p_family_id
+      AND NOT (
+        fm.user_id = (SELECT auth.uid())
+        AND fm.is_active IS DISTINCT FROM true
+        AND p_is_active IS TRUE
+      )
+      AND NOT (
+        fm.role = 'admin'
+        AND fm.is_active IS TRUE
+        AND fm.user_id IS NOT NULL
+        AND (
+          p_role IS DISTINCT FROM 'admin'
+          OR p_is_active IS DISTINCT FROM true
+          OR p_user_id IS NULL
+        )
+        AND NOT EXISTS (
+          SELECT 1
+          FROM public.family_members other
+          WHERE other.family_id = fm.family_id
+            AND other.id <> fm.id
+            AND other.role = 'admin'
+            AND other.is_active IS TRUE
+            AND other.user_id IS NOT NULL
+        )
+      )
       AND (
         public.is_family_admin(fm.family_id)
         OR (
@@ -310,6 +355,295 @@ BEGIN
 END;
 $fn$;
 
+-- Marca la promoción de admin que hace el borrado de cuenta.
+-- Sin políticas: solo la función SECURITY DEFINER la escribe.
+-- No guarda datos de la familia. Se vacía al aplicar este script.
+CREATE TABLE IF NOT EXISTS public._account_deletion_guard (
+  actor uuid PRIMARY KEY,
+  family_id uuid NOT NULL,
+  successor_id uuid NOT NULL
+);
+
+ALTER TABLE public._account_deletion_guard ENABLE ROW LEVEL SECURITY;
+
+REVOKE ALL ON TABLE public._account_deletion_guard FROM PUBLIC;
+REVOKE ALL ON TABLE public._account_deletion_guard FROM anon;
+REVOKE ALL ON TABLE public._account_deletion_guard FROM authenticated;
+
+DELETE FROM public._account_deletion_guard;
+
+-- Vacía o reasigna una columna de autoría. No hace nada si no hay filas.
+CREATE OR REPLACE FUNCTION public._apply_authorship_reassign(
+  p_table text,
+  p_column text,
+  p_from uuid,
+  p_to uuid
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $fn$
+DECLARE
+  v_type text;
+  v_nullable text;
+  v_count integer;
+BEGIN
+  IF p_from IS NULL OR to_regclass(format('public.%I', p_table)) IS NULL THEN
+    RETURN;
+  END IF;
+
+  SELECT data_type, is_nullable
+  INTO v_type, v_nullable
+  FROM information_schema.columns
+  WHERE table_schema = 'public'
+    AND table_name = p_table
+    AND column_name = p_column;
+
+  IF v_type IS NULL THEN
+    RETURN;
+  END IF;
+
+  IF v_type NOT IN ('uuid', 'text', 'character varying') THEN
+    EXECUTE format(
+      'SELECT count(*) FROM public.%I WHERE %I::text = $1',
+      p_table, p_column
+    )
+    INTO v_count
+    USING p_from::text;
+    IF v_count > 0 THEN
+      RAISE EXCEPTION
+        'La columna %.% tiene un tipo que no se puede reasignar (%). No se borró la cuenta.',
+        p_table, p_column, v_type;
+    END IF;
+    RETURN;
+  END IF;
+
+  IF v_nullable = 'YES' THEN
+    IF v_type = 'uuid' THEN
+      EXECUTE format(
+        'UPDATE public.%I SET %I = NULL WHERE %I = $1',
+        p_table, p_column, p_column
+      )
+      USING p_from;
+    ELSE
+      EXECUTE format(
+        'UPDATE public.%I SET %I = NULL WHERE %I = $1',
+        p_table, p_column, p_column
+      )
+      USING p_from::text;
+    END IF;
+    RETURN;
+  END IF;
+
+  IF v_type = 'uuid' THEN
+    EXECUTE format(
+      'SELECT count(*) FROM public.%I WHERE %I = $1',
+      p_table, p_column
+    )
+    INTO v_count
+    USING p_from;
+  ELSE
+    EXECUTE format(
+      'SELECT count(*) FROM public.%I WHERE %I = $1',
+      p_table, p_column
+    )
+    INTO v_count
+    USING p_from::text;
+  END IF;
+
+  IF v_count = 0 THEN
+    RETURN;
+  END IF;
+
+  IF p_to IS NULL THEN
+    RAISE EXCEPTION
+      'La columna %.% no acepta vacío y no hay otro miembro a quien pasar esos datos. No se borró la cuenta.',
+      p_table, p_column;
+  END IF;
+
+  IF v_type = 'uuid' THEN
+    EXECUTE format(
+      'UPDATE public.%I SET %I = $2 WHERE %I = $1',
+      p_table, p_column, p_column
+    )
+    USING p_from, p_to;
+  ELSE
+    EXECUTE format(
+      'UPDATE public.%I SET %I = $2 WHERE %I = $1',
+      p_table, p_column, p_column
+    )
+    USING p_from::text, p_to::text;
+  END IF;
+END;
+$fn$;
+
+-- Revisa claves foráneas y nombres habituales de autoría.
+-- p_member es el id de family_members. p_uid es el usuario de Auth.
+-- Si la columna acepta NULL, se vacía. Si no, pasa al miembro que se queda.
+CREATE OR REPLACE FUNCTION public._reassign_authorship(
+  p_member uuid,
+  p_uid uuid,
+  p_fallback_member uuid,
+  p_fallback_user uuid
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $fn$
+DECLARE
+  r record;
+  v_match uuid;
+  v_fallback uuid;
+  v_seen text[] := ARRAY[]::text[];
+  v_key text;
+BEGIN
+  FOR r IN
+    SELECT
+      c.relname AS table_name,
+      a.attname AS column_name,
+      fns.nspname AS ref_schema,
+      fc.relname AS ref_table,
+      fa.attname AS ref_column,
+      array_length(con.conkey, 1) AS nkeys
+    FROM pg_constraint con
+    JOIN pg_class c ON c.oid = con.conrelid
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    JOIN pg_class fc ON fc.oid = con.confrelid
+    JOIN pg_namespace fns ON fns.oid = fc.relnamespace
+    JOIN LATERAL unnest(con.conkey) WITH ORDINALITY AS ck(attnum, ord) ON true
+    JOIN pg_attribute a
+      ON a.attrelid = c.oid
+     AND a.attnum = ck.attnum
+     AND NOT a.attisdropped
+    JOIN LATERAL unnest(con.confkey) WITH ORDINALITY AS fk(attnum, ord)
+      ON fk.ord = ck.ord
+    JOIN pg_attribute fa
+      ON fa.attrelid = fc.oid
+     AND fa.attnum = fk.attnum
+     AND NOT fa.attisdropped
+    WHERE con.contype = 'f'
+      AND n.nspname = 'public'
+      AND (
+        (fns.nspname = 'public' AND fc.relname = 'family_members')
+        OR (fns.nspname = 'auth' AND fc.relname = 'users')
+      )
+  LOOP
+    IF r.table_name IN (
+      'kakeibo_reflections',
+      'user_profiles',
+      '_account_deletion_guard'
+    ) THEN
+      CONTINUE;
+    END IF;
+    IF r.table_name = 'family_members' AND r.column_name = 'user_id' THEN
+      CONTINUE;
+    END IF;
+
+    IF r.nkeys IS DISTINCT FROM 1 THEN
+      RAISE EXCEPTION
+        'La clave foránea de %.% es compuesta y no se puede reasignar sola. No se borró la cuenta.',
+        r.table_name, r.column_name;
+    END IF;
+
+    v_key := r.table_name || '.' || r.column_name;
+    IF v_key = ANY (v_seen) THEN
+      CONTINUE;
+    END IF;
+    v_seen := array_append(v_seen, v_key);
+
+    IF r.ref_schema = 'public'
+       AND r.ref_table = 'family_members'
+       AND r.ref_column = 'id' THEN
+      v_match := p_member;
+      v_fallback := p_fallback_member;
+    ELSIF r.ref_schema = 'auth' AND r.ref_table = 'users' THEN
+      v_match := p_uid;
+      v_fallback := p_fallback_user;
+    ELSE
+      v_match := COALESCE(p_member, p_uid);
+      v_fallback := COALESCE(p_fallback_member, p_fallback_user);
+    END IF;
+
+    PERFORM public._apply_authorship_reassign(
+      r.table_name, r.column_name, v_match, v_fallback
+    );
+  END LOOP;
+
+  FOR r IN
+    SELECT *
+    FROM (
+      VALUES
+        ('transactions', 'registered_by', 'either'),
+        ('transactions', 'created_by_user_id', 'user'),
+        ('transactions', 'created_by', 'user'),
+        ('transactions', 'user_id', 'user'),
+        ('transactions', 'author_id', 'user'),
+        ('transactions', 'owner_id', 'user'),
+        ('transactions', 'member_id', 'member'),
+        ('savings_goals', 'registered_by', 'either'),
+        ('savings_goals', 'created_by_user_id', 'user'),
+        ('savings_goals', 'created_by', 'user'),
+        ('savings_goals', 'user_id', 'user'),
+        ('savings_goals', 'author_id', 'user'),
+        ('savings_goals', 'owner_id', 'user'),
+        ('savings_goals', 'member_id', 'member'),
+        ('recurring_rules', 'registered_by', 'either'),
+        ('recurring_rules', 'created_by_user_id', 'user'),
+        ('recurring_rules', 'created_by', 'user'),
+        ('recurring_rules', 'user_id', 'user'),
+        ('recurring_rules', 'author_id', 'user'),
+        ('recurring_rules', 'owner_id', 'user'),
+        ('recurring_rules', 'member_id', 'member'),
+        ('envelopes', 'assigned_member_id', 'member'),
+        ('envelopes', 'owner_member_id', 'member'),
+        ('envelopes', 'created_by_user_id', 'user'),
+        ('envelopes', 'created_by', 'user'),
+        ('envelopes', 'user_id', 'user'),
+        ('accounts', 'owner_member_id', 'member'),
+        ('accounts', 'assigned_member_id', 'member'),
+        ('accounts', 'created_by_user_id', 'user'),
+        ('accounts', 'user_id', 'user'),
+        ('family_members', 'invited_by', 'either')
+    ) AS names(table_name, column_name, kind)
+  LOOP
+    v_key := r.table_name || '.' || r.column_name;
+    IF v_key = ANY (v_seen) THEN
+      CONTINUE;
+    END IF;
+    IF r.table_name = 'family_members' AND r.column_name = 'user_id' THEN
+      CONTINUE;
+    END IF;
+    IF NOT public._has_column(r.table_name, r.column_name) THEN
+      CONTINUE;
+    END IF;
+    v_seen := array_append(v_seen, v_key);
+
+    IF r.kind = 'member' AND p_member IS NOT NULL THEN
+      PERFORM public._apply_authorship_reassign(
+        r.table_name, r.column_name, p_member, p_fallback_member
+      );
+    ELSIF r.kind = 'user' AND p_uid IS NOT NULL THEN
+      PERFORM public._apply_authorship_reassign(
+        r.table_name, r.column_name, p_uid, p_fallback_user
+      );
+    ELSIF r.kind = 'either' THEN
+      IF p_member IS NOT NULL THEN
+        PERFORM public._apply_authorship_reassign(
+          r.table_name, r.column_name, p_member, p_fallback_member
+        );
+      END IF;
+      IF p_uid IS NOT NULL AND p_uid IS DISTINCT FROM p_member THEN
+        PERFORM public._apply_authorship_reassign(
+          r.table_name, r.column_name, p_uid, p_fallback_user
+        );
+      END IF;
+    END IF;
+  END LOOP;
+END;
+$fn$;
+
 CREATE OR REPLACE FUNCTION public._delete_family_completely(p_family uuid)
 RETURNS void
 LANGUAGE plpgsql
@@ -374,17 +708,33 @@ SET search_path = public
 AS $fn$
 DECLARE
   v_fallback uuid;
+  v_fallback_user uuid;
 BEGIN
-  SELECT id
-  INTO v_fallback
+  SELECT id, user_id
+  INTO v_fallback, v_fallback_user
   FROM public.family_members
   WHERE family_id = p_family
     AND id <> p_member
     AND user_id IS NOT NULL
+    AND user_id IS DISTINCT FROM p_uid
   ORDER BY
-    CASE WHEN role = 'admin' AND is_active THEN 0 ELSE 1 END,
+    CASE
+      WHEN role = 'admin' AND is_active THEN 0
+      WHEN is_active THEN 1
+      ELSE 2
+    END,
     created_at ASC NULLS LAST
   LIMIT 1;
+
+  IF v_fallback IS NULL THEN
+    SELECT id
+    INTO v_fallback
+    FROM public.family_members
+    WHERE family_id = p_family
+      AND id <> p_member
+    ORDER BY created_at ASC NULLS LAST
+    LIMIT 1;
+  END IF;
 
   IF to_regclass('public.kakeibo_reflections') IS NOT NULL THEN
     IF public._has_column('kakeibo_reflections', 'member_id') THEN
@@ -400,41 +750,48 @@ BEGIN
     END IF;
   END IF;
 
-  PERFORM public._null_or_reassign(
-    'envelopes', 'assigned_member_id', p_member, v_fallback
-  );
-  PERFORM public._null_or_reassign(
-    'accounts', 'owner_member_id', p_member, v_fallback
-  );
-  PERFORM public._null_or_reassign(
-    'family_members', 'invited_by', p_member, v_fallback
+  -- Antes de borrar la fila: si no, un CASCADE se lleva lo compartido.
+  PERFORM public._reassign_authorship(
+    p_member,
+    p_uid,
+    v_fallback,
+    v_fallback_user
   );
 
   DELETE FROM public.family_members WHERE id = p_member;
 END;
 $fn$;
 
--- Borra los datos de auth.uid(). No borra auth.users.
-CREATE OR REPLACE FUNCTION public.delete_my_account_data()
+-- Borra los datos de p_uid. No borra auth.users.
+-- Solo service_role puede ejecutarla. Si hay sesión de usuario,
+-- el uid tiene que ser el de esa sesión.
+CREATE OR REPLACE FUNCTION public.delete_my_account_data(p_uid uuid)
 RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
 AS $fn$
 DECLARE
-  v_uid uuid := auth.uid();
+  v_uid uuid := p_uid;
   v_member record;
   v_member_ids uuid[];
   v_member_id uuid;
   v_other_count integer;
   v_other_admin boolean;
   v_successor uuid;
+  v_fallback_user uuid;
   v_action text;
   v_summary jsonb := '[]'::jsonb;
 BEGIN
   IF v_uid IS NULL THEN
     RAISE EXCEPTION 'Usuario no autenticado';
   END IF;
+
+  IF auth.uid() IS NOT NULL AND auth.uid() IS DISTINCT FROM v_uid THEN
+    RAISE EXCEPTION 'No puedes borrar la cuenta de otra persona';
+  END IF;
+
+  DELETE FROM public._account_deletion_guard WHERE actor = v_uid;
 
   SELECT coalesce(array_agg(id ORDER BY created_at ASC NULLS LAST), '{}'::uuid[])
   INTO v_member_ids
@@ -494,10 +851,20 @@ BEGIN
             'No hay otro miembro a quien transferir la administración';
         END IF;
 
+        -- El trigger deja pasar esta fila aunque el admin que se va
+        -- esté inactivo (is_family_admin exige is_active).
+        INSERT INTO public._account_deletion_guard (actor, family_id, successor_id)
+        VALUES (v_uid, v_member.family_id, v_successor)
+        ON CONFLICT (actor) DO UPDATE
+          SET family_id = EXCLUDED.family_id,
+              successor_id = EXCLUDED.successor_id;
+
         UPDATE public.family_members
         SET role = 'admin',
             is_active = true
         WHERE id = v_successor;
+
+        DELETE FROM public._account_deletion_guard WHERE actor = v_uid;
 
         v_action := 'admin_transferido';
       ELSE
@@ -522,6 +889,20 @@ BEGIN
   IF to_regclass('public.user_profiles') IS NOT NULL THEN
     DELETE FROM public.user_profiles WHERE id = v_uid;
   END IF;
+
+  -- Segunda pasada: lo que todavía apunte al usuario de Auth,
+  -- antes de que la Edge Function borre auth.users.
+  SELECT user_id
+  INTO v_fallback_user
+  FROM public.family_members
+  WHERE user_id IS NOT NULL
+    AND user_id <> v_uid
+  ORDER BY created_at ASC NULLS LAST
+  LIMIT 1;
+
+  PERFORM public._reassign_authorship(NULL, v_uid, NULL, v_fallback_user);
+
+  DELETE FROM public._account_deletion_guard WHERE actor = v_uid;
 
   RETURN jsonb_build_object(
     'user_id', v_uid,
@@ -578,7 +959,7 @@ BEGIN
 
   IF v_row.invitation_expires_at IS NULL
      OR v_row.invitation_expires_at <= now() THEN
-    RAISE EXCEPTION 'El token de invitación ha expirado';
+    RAISE EXCEPTION 'Token de invitación inválido';
   END IF;
 
   UPDATE public.family_members
@@ -590,6 +971,82 @@ BEGIN
   RETURNING * INTO v_row;
 
   RETURN to_jsonb(v_row);
+END;
+$fn$;
+
+-- Crea la familia y al admin juntos. families_select no ve la fila
+-- hasta que existe el miembro, por eso no se hace con dos INSERT del cliente.
+CREATE OR REPLACE FUNCTION public.create_family(p_name text)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $fn$
+DECLARE
+  v_uid uuid := auth.uid();
+  v_family public.families%ROWTYPE;
+  v_member public.family_members%ROWTYPE;
+  v_display text := 'Admin';
+  v_email text;
+BEGIN
+  IF v_uid IS NULL THEN
+    RAISE EXCEPTION 'Usuario no autenticado';
+  END IF;
+
+  IF p_name IS NULL OR length(btrim(p_name)) = 0 OR length(p_name) > 120 THEN
+    RAISE EXCEPTION 'La familia necesita un nombre';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM public.family_members
+    WHERE user_id = v_uid
+      AND is_active = true
+  ) THEN
+    RAISE EXCEPTION 'Ya perteneces a una familia';
+  END IF;
+
+  IF to_regclass('auth.users') IS NOT NULL
+     AND EXISTS (
+       SELECT 1
+       FROM information_schema.columns
+       WHERE table_schema = 'auth'
+         AND table_name = 'users'
+         AND column_name = 'email'
+     ) THEN
+    SELECT email
+    INTO v_email
+    FROM auth.users
+    WHERE id = v_uid;
+    IF v_email IS NOT NULL AND position('@' IN v_email) > 1 THEN
+      v_display := split_part(v_email, '@', 1);
+    END IF;
+  END IF;
+
+  INSERT INTO public.families (name)
+  VALUES (btrim(p_name))
+  RETURNING * INTO v_family;
+
+  INSERT INTO public.family_members (
+    family_id,
+    user_id,
+    display_name,
+    role,
+    is_active
+  )
+  VALUES (
+    v_family.id,
+    v_uid,
+    v_display,
+    'admin',
+    true
+  )
+  RETURNING * INTO v_member;
+
+  RETURN jsonb_build_object(
+    'family', to_jsonb(v_family),
+    'member', to_jsonb(v_member)
+  );
 END;
 $fn$;
 
@@ -621,12 +1078,14 @@ BEGIN
       RETURN NEW;
     END IF;
 
-    IF public.is_family_admin(NEW.family_id) THEN
-      RETURN NEW;
-    END IF;
-
+    -- Invitación: sin user_id y con token. Nadie inserta el id de otra persona.
     IF public.is_family_manager(NEW.family_id)
-       AND NEW.role IS DISTINCT FROM 'admin' THEN
+       AND NEW.user_id IS NULL
+       AND NEW.invitation_token IS NOT NULL
+       AND (
+         public.is_family_admin(NEW.family_id)
+         OR NEW.role IS DISTINCT FROM 'admin'
+       ) THEN
       RETURN NEW;
     END IF;
 
@@ -656,6 +1115,50 @@ BEGIN
     RETURN OLD;
   END IF;
 
+  -- Promoción hecha por delete_my_account_data, también si el admin
+  -- que se va está inactivo.
+  IF EXISTS (
+    SELECT 1
+    FROM public._account_deletion_guard g
+    WHERE g.actor IS NOT DISTINCT FROM auth.uid()
+      AND g.successor_id = NEW.id
+      AND g.family_id IS NOT DISTINCT FROM NEW.family_id
+      AND g.family_id IS NOT DISTINCT FROM OLD.family_id
+      AND NEW.role = 'admin'
+      AND NEW.is_active IS TRUE
+      AND NEW.user_id IS NOT DISTINCT FROM OLD.user_id
+      AND NEW.family_id IS NOT DISTINCT FROM OLD.family_id
+      AND NEW.invitation_token IS NOT DISTINCT FROM OLD.invitation_token
+  ) THEN
+    RETURN NEW;
+  END IF;
+
+  IF OLD.user_id IS NOT DISTINCT FROM auth.uid()
+     AND OLD.is_active IS DISTINCT FROM true
+     AND NEW.is_active IS TRUE THEN
+    RAISE EXCEPTION 'No puedes reactivar tu propia cuenta';
+  END IF;
+
+  IF OLD.role = 'admin'
+     AND OLD.is_active IS TRUE
+     AND OLD.user_id IS NOT NULL
+     AND (
+       NEW.role IS DISTINCT FROM 'admin'
+       OR NEW.is_active IS DISTINCT FROM true
+       OR NEW.user_id IS NULL
+     )
+     AND NOT EXISTS (
+       SELECT 1
+       FROM public.family_members
+       WHERE family_id = OLD.family_id
+         AND id <> OLD.id
+         AND role = 'admin'
+         AND is_active IS TRUE
+         AND user_id IS NOT NULL
+     ) THEN
+    RAISE EXCEPTION 'La familia debe conservar un administrador activo';
+  END IF;
+
   -- Reclamar invitación: solo hacia uno mismo, sin cambiar el rol.
   IF OLD.user_id IS NULL
      AND OLD.invitation_token IS NOT NULL
@@ -668,7 +1171,7 @@ BEGIN
   THEN
     IF OLD.invitation_expires_at IS NULL
        OR OLD.invitation_expires_at <= now() THEN
-      RAISE EXCEPTION 'El token de invitación ha expirado';
+      RAISE EXCEPTION 'Token de invitación inválido';
     END IF;
     IF EXISTS (
       SELECT 1
@@ -688,19 +1191,6 @@ BEGIN
   IF NEW.role IS DISTINCT FROM OLD.role THEN
     IF NOT public.is_family_admin(OLD.family_id) THEN
       RAISE EXCEPTION 'No puedes cambiar el rol';
-    END IF;
-    IF OLD.role = 'admin' AND NEW.role IS DISTINCT FROM 'admin' THEN
-      IF NOT EXISTS (
-        SELECT 1
-        FROM public.family_members
-        WHERE family_id = OLD.family_id
-          AND id <> OLD.id
-          AND role = 'admin'
-          AND is_active = true
-          AND user_id IS NOT NULL
-      ) THEN
-        RAISE EXCEPTION 'La familia debe conservar un administrador';
-      END IF;
     END IF;
   END IF;
 
@@ -735,10 +1225,10 @@ BEGIN
     'public.is_family_manager(uuid)',
     'public.family_is_empty(uuid)',
     'public.shares_family_with(uuid)',
-    'public.family_member_update_allowed(uuid,uuid,uuid,text,text)',
+    'public.family_member_update_allowed(uuid,uuid,uuid,text,text,boolean)',
     'public.get_my_family_id()',
     'public.accept_family_invitation(text)',
-    'public.delete_my_account_data()',
+    'public.create_family(text)',
     'public.guard_family_member_changes()'
   ]
   LOOP
@@ -751,14 +1241,20 @@ BEGIN
   FOREACH fn IN ARRAY ARRAY[
     'public._has_column(text,text)',
     'public._null_or_reassign(text,text,uuid,uuid)',
+    'public._apply_authorship_reassign(text,text,uuid,uuid)',
+    'public._reassign_authorship(uuid,uuid,uuid,uuid)',
     'public._delete_family_completely(uuid)',
-    'public._remove_member_from_shared_family(uuid,uuid,uuid)'
+    'public._remove_member_from_shared_family(uuid,uuid,uuid)',
+    'public.delete_my_account_data(uuid)'
   ]
   LOOP
     EXECUTE format('REVOKE ALL ON FUNCTION %s FROM PUBLIC', fn);
     EXECUTE format('REVOKE ALL ON FUNCTION %s FROM anon', fn);
     EXECUTE format('REVOKE ALL ON FUNCTION %s FROM authenticated', fn);
+    EXECUTE format('REVOKE ALL ON FUNCTION %s FROM service_role', fn);
   END LOOP;
+
+  GRANT EXECUTE ON FUNCTION public.delete_my_account_data(uuid) TO service_role;
 END
 $grants$;
 
@@ -780,10 +1276,9 @@ CREATE POLICY "families_select"
 ON public.families FOR SELECT TO authenticated
 USING (public.is_family_member(id));
 
+-- Sin política de INSERT: el cliente no puede crear una familia sola.
+-- create_family (SECURITY DEFINER) inserta familia y admin juntos.
 DROP POLICY IF EXISTS "families_insert" ON public.families;
-CREATE POLICY "families_insert"
-ON public.families FOR INSERT TO authenticated
-WITH CHECK ((SELECT auth.uid()) IS NOT NULL);
 
 DROP POLICY IF EXISTS "families_update" ON public.families;
 CREATE POLICY "families_update"
@@ -815,10 +1310,14 @@ WITH CHECK (
     AND is_active = true
     AND invitation_token IS NULL
   )
-  OR public.is_family_admin(family_id)
   OR (
     public.is_family_manager(family_id)
-    AND role IS DISTINCT FROM 'admin'
+    AND user_id IS NULL
+    AND invitation_token IS NOT NULL
+    AND (
+      public.is_family_admin(family_id)
+      OR role IS DISTINCT FROM 'admin'
+    )
   )
 );
 
@@ -835,7 +1334,8 @@ WITH CHECK (
     family_id,
     user_id,
     role,
-    invitation_token
+    invitation_token,
+    is_active
   )
 );
 
@@ -913,26 +1413,64 @@ ON public.accounts FOR ALL TO authenticated
 USING (public.is_family_member(family_id))
 WITH CHECK (public.is_family_member(family_id));
 
--- ── Índices (no tocan los datos) ─────────────────────────────────────────────
+-- ── Índices (no tocan los datos; se omiten si la columna no existe) ──────────
 
-CREATE INDEX IF NOT EXISTS idx_accounts_family_id ON public.accounts (family_id);
-CREATE INDEX IF NOT EXISTS idx_accounts_owner_member_id ON public.accounts (owner_member_id);
-CREATE INDEX IF NOT EXISTS idx_envelopes_family_id ON public.envelopes (family_id);
-CREATE INDEX IF NOT EXISTS idx_envelopes_assigned_member_id ON public.envelopes (assigned_member_id);
-CREATE INDEX IF NOT EXISTS idx_family_members_invited_by ON public.family_members (invited_by);
-CREATE INDEX IF NOT EXISTS idx_family_members_user_id ON public.family_members (user_id);
-CREATE INDEX IF NOT EXISTS idx_family_members_invitation_token
-  ON public.family_members (invitation_token)
-  WHERE invitation_token IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_kakeibo_reflections_family_id ON public.kakeibo_reflections (family_id);
-CREATE INDEX IF NOT EXISTS idx_kakeibo_reflections_member_id ON public.kakeibo_reflections (member_id);
-CREATE INDEX IF NOT EXISTS idx_recurring_rules_family_id ON public.recurring_rules (family_id);
-CREATE INDEX IF NOT EXISTS idx_recurring_rules_envelope_id ON public.recurring_rules (envelope_id);
-CREATE INDEX IF NOT EXISTS idx_recurring_rules_account_id ON public.recurring_rules (account_id);
-CREATE INDEX IF NOT EXISTS idx_savings_goals_family_id ON public.savings_goals (family_id);
-CREATE INDEX IF NOT EXISTS idx_sync_queue_family_id ON public.sync_queue (family_id);
-CREATE INDEX IF NOT EXISTS idx_transactions_account_id ON public.transactions (account_id);
-CREATE INDEX IF NOT EXISTS idx_transactions_registered_by ON public.transactions (registered_by);
+DO $indexes$
+DECLARE
+  r record;
+BEGIN
+  FOR r IN
+    SELECT *
+    FROM (
+      VALUES
+        ('accounts', 'family_id', 'idx_accounts_family_id'),
+        ('accounts', 'owner_member_id', 'idx_accounts_owner_member_id'),
+        ('envelopes', 'family_id', 'idx_envelopes_family_id'),
+        ('envelopes', 'assigned_member_id', 'idx_envelopes_assigned_member_id'),
+        ('family_members', 'invited_by', 'idx_family_members_invited_by'),
+        ('family_members', 'user_id', 'idx_family_members_user_id'),
+        ('kakeibo_reflections', 'family_id', 'idx_kakeibo_reflections_family_id'),
+        ('kakeibo_reflections', 'member_id', 'idx_kakeibo_reflections_member_id'),
+        ('recurring_rules', 'family_id', 'idx_recurring_rules_family_id'),
+        ('recurring_rules', 'envelope_id', 'idx_recurring_rules_envelope_id'),
+        ('recurring_rules', 'account_id', 'idx_recurring_rules_account_id'),
+        ('savings_goals', 'family_id', 'idx_savings_goals_family_id'),
+        ('sync_queue', 'family_id', 'idx_sync_queue_family_id'),
+        ('transactions', 'account_id', 'idx_transactions_account_id'),
+        ('transactions', 'registered_by', 'idx_transactions_registered_by'),
+        ('transactions', 'created_by_user_id', 'idx_transactions_created_by_user_id')
+    ) AS wanted(table_name, column_name, index_name)
+  LOOP
+    IF EXISTS (
+      SELECT 1
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = r.table_name
+        AND column_name = r.column_name
+    ) THEN
+      EXECUTE format(
+        'CREATE INDEX IF NOT EXISTS %I ON public.%I (%I)',
+        r.index_name,
+        r.table_name,
+        r.column_name
+      );
+    END IF;
+  END LOOP;
+
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'family_members'
+      AND column_name = 'invitation_token'
+  ) THEN
+    EXECUTE
+      'CREATE INDEX IF NOT EXISTS idx_family_members_invitation_token
+       ON public.family_members (invitation_token)
+       WHERE invitation_token IS NOT NULL';
+  END IF;
+END
+$indexes$;
 
 DO $unique_members$
 BEGIN
@@ -1009,10 +1547,13 @@ BEGIN
     RAISE EXCEPTION 'family_members UPDATE sigue sin WITH CHECK';
   END IF;
 
+  -- INSERT con user_id vacío y token es la invitación, y es correcto.
+  -- Lo que no puede quedar es un SELECT o UPDATE que abra esas filas.
   IF EXISTS (
     SELECT 1
     FROM pg_policies
     WHERE schemaname = 'public'
+      AND cmd IN ('SELECT', 'UPDATE', 'ALL')
       AND (
         coalesce(qual, '') ~* 'invitation_token'
         OR coalesce(with_check, '') ~* 'invitation_token'
@@ -1032,6 +1573,7 @@ BEGIN
       'is_family_admin',
       'is_family_manager',
       'accept_family_invitation',
+      'create_family',
       'delete_my_account_data',
       'guard_family_member_changes'
     ]) AS proname
@@ -1054,6 +1596,52 @@ BEGIN
       AND NOT tgisinternal
   ) THEN
     RAISE EXCEPTION 'Falta el trigger que impide cambiar el rol';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'families'
+      AND cmd = 'INSERT'
+  ) THEN
+    RAISE EXCEPTION 'families no debe aceptar INSERT directo: usa create_family';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_proc
+    WHERE proname = 'delete_my_account_data'
+      AND pronamespace = 'public'::regnamespace
+      AND pronargs = 1
+  ) OR EXISTS (
+    SELECT 1
+    FROM pg_proc
+    WHERE proname = 'delete_my_account_data'
+      AND pronamespace = 'public'::regnamespace
+      AND pronargs = 0
+  ) THEN
+    RAISE EXCEPTION 'delete_my_account_data debe recibir el uid';
+  END IF;
+
+  IF has_function_privilege(
+    'authenticated',
+    'public.delete_my_account_data(uuid)',
+    'EXECUTE'
+  ) THEN
+    RAISE EXCEPTION 'authenticated no debe ejecutar delete_my_account_data';
+  END IF;
+
+  IF NOT has_function_privilege(
+    'service_role',
+    'public.delete_my_account_data(uuid)',
+    'EXECUTE'
+  ) THEN
+    RAISE EXCEPTION 'service_role debe ejecutar delete_my_account_data';
+  END IF;
+
+  IF to_regclass('public._account_deletion_guard') IS NULL THEN
+    RAISE EXCEPTION 'Falta la marca de transferencia de admin';
   END IF;
 END
 $verify$;

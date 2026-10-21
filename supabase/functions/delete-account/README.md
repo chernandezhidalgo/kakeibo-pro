@@ -9,11 +9,12 @@ Borra de verdad el usuario de Supabase Auth y sus datos. No es un cierre de sesi
 - **Hay otras cuentas**:
   - El presupuesto compartido se conserva. Quitar los gastos de una persona descuadraría los sobres de quienes se quedan.
   - Se borran sus reflexiones, su fila de miembro y su perfil.
-  - Si era el único administrador activo, el rol `admin` pasa al co_admin activo más antiguo. Si no hay, al otro miembro activo más antiguo. Si solo quedan miembros inactivos, al más antiguo y se reactiva.
+  - Antes de borrar la membresía, las columnas de autoría (`registered_by`, `created_by_user_id` y las equivalentes en metas y reglas, más las claves foráneas que apunten a esa persona) se pasan a quien se queda, o quedan vacías si la columna lo permite. Así el borrado de Auth no arrastra los movimientos compartidos.
+  - Si era el único administrador activo, el rol `admin` pasa al co_admin activo más antiguo. Si no hay, al otro miembro activo más antiguo. Si solo quedan miembros inactivos, al más antiguo y se reactiva. También si quien se va es admin pero está inactivo.
 - En los dos casos, esta función borra después el usuario de Auth.
 - La suscripción de Google Play no se cancela. Hay que hacerlo en Play → Pagos y suscripciones.
 
-La lógica de los datos está en `public.delete_my_account_data()` (`supabase_fixes.sql`). Esta función solo la ejecuta con el JWT de la persona y luego llama a `auth.admin.deleteUser`.
+La lógica de los datos está en `public.delete_my_account_data(p_uid)` (`supabase_fixes.sql`). Solo `service_role` puede ejecutarla. Esta Edge Function comprueba el JWT de la persona, llama al RPC con la service role pasando ese uid (no un uid que venga en el cuerpo) y después llama a `auth.admin.deleteUser`.
 
 ## Qué tiene que hacer Carlos
 

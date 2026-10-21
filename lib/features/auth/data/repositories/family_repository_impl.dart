@@ -72,34 +72,30 @@ class FamilyRepositoryImpl implements FamilyRepository {
         );
       }
 
-      // 1. Insertar familia
-      final familyData = await _client
-          .from('families')
-          .insert({'name': name})
-          .select()
-          .single();
-
-      final familyId = familyData['id'] as String;
-
-      // 2. Insertar al creador como admin
-      // TODO: displayName debería venir del perfil de usuario en Fase 2
-      final displayName =
-          currentUser.email?.split('@').first ?? 'Admin';
-
-      final memberData = await _client
-          .from('family_members')
-          .insert({
-            'family_id': familyId,
-            'user_id': currentUser.id,
-            'display_name': displayName,
-            'role': 'admin',
-            'is_active': true,
-          })
-          .select()
-          .single();
+      // La política de lectura de families exige ser miembro, y el
+      // miembro todavía no existe. create_family inserta los dos.
+      final raw = await _client.rpc(
+        'create_family',
+        params: {'p_name': name},
+      );
+      final payload = switch (raw) {
+        final Map rawMap => Map<String, dynamic>.from(rawMap),
+        _ => null,
+      };
+      final familyRaw = payload?['family'];
+      final memberRaw = payload?['member'];
+      if (familyRaw is! Map || memberRaw is! Map) {
+        return (
+          data: null,
+          failure: const AuthFailure('No se pudo crear la familia'),
+        );
+      }
 
       return (
-        data: _mapFamily(familyData, [_mapMember(memberData)]),
+        data: _mapFamily(
+          Map<String, dynamic>.from(familyRaw),
+          [_mapMember(Map<String, dynamic>.from(memberRaw))],
+        ),
         failure: null,
       );
     } on PostgrestException catch (e) {
