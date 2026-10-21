@@ -1,5 +1,6 @@
 import java.util.Properties
 import java.io.FileInputStream
+import org.gradle.api.GradleException
 
 plugins {
     id("com.android.application")
@@ -11,11 +12,20 @@ plugins {
     id("com.google.gms.google-services")
 }
 
-// Ã¢â€â‚¬Ã¢â€â‚¬ Lectura de key.properties (solo si el archivo existe) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+// key.properties solo hace falta para firmar release. Debug no lo usa.
 val keyPropertiesFile = rootProject.file("key.properties")
 val keyProperties = Properties()
-if (keyPropertiesFile.exists()) {
+val hasReleaseKeystore = keyPropertiesFile.exists()
+if (hasReleaseKeystore) {
     keyProperties.load(FileInputStream(keyPropertiesFile))
+    val requiredKeys = listOf("storeFile", "storePassword", "keyAlias", "keyPassword")
+    val blankKeys = requiredKeys.filter { keyProperties.getProperty(it).isNullOrBlank() }
+    if (blankKeys.isNotEmpty()) {
+        throw GradleException(
+            "android/key.properties esta incompleto. Faltan: ${blankKeys.joinToString(", ")}. " +
+                "Hacen falta storeFile, storePassword, keyAlias y keyPassword.",
+        )
+    }
 }
 
 android {
@@ -42,25 +52,22 @@ android {
     }
 
     signingConfigs {
-        // ConfiguraciÃƒÂ³n de firma para release.
-        // Requiere android/key.properties con: storeFile, storePassword, keyAlias, keyPassword
-        // En CI/CD estas variables las provee el workflow de GitHub Actions.
-        if (keyPropertiesFile.exists()) {
+        // Release exige android/key.properties. No se reutiliza la firma de debug.
+        if (hasReleaseKeystore) {
             create("release") {
-                keyAlias = keyProperties["keyAlias"] as String
-                keyPassword = keyProperties["keyPassword"] as String
-                storeFile = file(keyProperties["storeFile"] as String)
-                storePassword = keyProperties["storePassword"] as String
+                keyAlias = keyProperties.getProperty("keyAlias")
+                keyPassword = keyProperties.getProperty("keyPassword")
+                storeFile = file(keyProperties.getProperty("storeFile")!!)
+                storePassword = keyProperties.getProperty("storePassword")
             }
         }
     }
 
     buildTypes {
         release {
-            signingConfig = if (keyPropertiesFile.exists())
-                signingConfigs.getByName("release")
-            else
-                signingConfigs.getByName("debug") // fallback para builds locales sin keystore
+            if (hasReleaseKeystore) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
@@ -76,4 +83,29 @@ flutter {
 dependencies {
     implementation("com.google.android.material:material:1.12.0")
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+}
+
+// Falla bundleRelease y assembleRelease antes de compilar si no hay keystore.
+// Las tareas de debug no contienen "Release" y no dependen de esta comprobación.
+val checkReleaseKeystore = tasks.register("checkReleaseKeystore") {
+    doLast {
+        if (!keyPropertiesFile.exists()) {
+            throw GradleException(
+                """
+                No se puede firmar el release: falta android/key.properties.
+                El build de release no usa la firma de debug.
+                Crea android/key.properties con storeFile, storePassword, keyAlias y keyPassword
+                (puedes copiar android/key.properties.template) y vuelve a lanzar
+                bundleRelease o assembleRelease.
+                Los builds de debug no necesitan ese archivo.
+                """.trimIndent(),
+            )
+        }
+    }
+}
+
+tasks.configureEach {
+    if (name != "checkReleaseKeystore" && name.contains("Release")) {
+        dependsOn(checkReleaseKeystore)
+    }
 }

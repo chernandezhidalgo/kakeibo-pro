@@ -1,13 +1,13 @@
 import 'package:firebase_core/firebase_core.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:kakeibo_pro/core/logging/app_logger.dart';
 import 'package:kakeibo_pro/core/notifications/notification_service.dart';
 import 'package:kakeibo_pro/core/purchases/purchases_service.dart';
 import 'package:kakeibo_pro/features/paywall/presentation/pages/paywall_page.dart';
 import 'package:kakeibo_pro/features/settings/presentation/pages/settings_page.dart';
-import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:go_router/go_router.dart';
 import 'package:kakeibo_pro/core/constants/app_colors.dart';
 import 'package:kakeibo_pro/core/constants/app_strings.dart';
@@ -45,6 +45,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  _installLocalErrorLogging();
 
   // 1. Supabase — lee variables inyectadas en tiempo de compilación:
   //    flutter run --dart-define=SUPABASE_URL=... --dart-define=SUPABASE_ANON_KEY=...
@@ -87,25 +88,6 @@ Future<void> main() async {
     ConnectivityListener.start();
   }
 
-  // 6. Sentry — inicializa monitoreo de errores y performance.
-  //    SENTRY_DSN vacío en desarrollo = Sentry silencioso (sin enviar datos).
-  //    NOTA: Se usa sin appRunner para evitar el Zone mismatch con el binding
-  //    que ya fue inicializado en la zona raíz (línea 1 del main).
-  await SentryFlutter.init(
-    (options) {
-      options.dsn = const String.fromEnvironment(
-        'SENTRY_DSN',
-        defaultValue: '', // vacío en dev — sin telemetría
-      );
-      options.tracesSampleRate = 0.2; // 20% de transacciones
-      options.environment = const String.fromEnvironment(
-        'APP_ENV',
-        defaultValue: 'development',
-      );
-      options.debug = false;
-    },
-  );
-
   // runApp se ejecuta en la misma zona donde se llamó ensureInitialized().
   runApp(
     ProviderScope(
@@ -115,6 +97,26 @@ Future<void> main() async {
       child: const KakeiboApp(),
     ),
   );
+}
+
+/// Errores de framework y zonas no capturadas. Se quedan en el dispositivo.
+void _installLocalErrorLogging() {
+  FlutterError.onError = (details) {
+    appLogger.e(
+      'Error de Flutter',
+      error: details.exception,
+      stackTrace: details.stack,
+    );
+    FlutterError.presentError(details);
+  };
+  PlatformDispatcher.instance.onError = (error, stack) {
+    appLogger.e(
+      'Error no capturado',
+      error: error,
+      stackTrace: stack,
+    );
+    return true;
+  };
 }
 
 // ── App raíz ──────────────────────────────────────────────────────────────────

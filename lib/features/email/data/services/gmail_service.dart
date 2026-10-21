@@ -3,30 +3,58 @@ import 'dart:convert';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:extension_google_sign_in_as_googleapis_auth/extension_google_sign_in_as_googleapis_auth.dart';
 import 'package:googleapis/gmail/v1.dart' as gmail;
-import 'package:logger/logger.dart';
 
+import 'package:kakeibo_pro/core/logging/app_logger.dart';
 import 'package:kakeibo_pro/features/email/domain/models/bank_email.dart';
 import 'package:kakeibo_pro/features/email/domain/parsers/bac_email_parser.dart';
 import 'package:kakeibo_pro/features/email/domain/parsers/bn_email_parser.dart';
 
 class GmailService {
-  static const _scopes = [gmail.GmailApi.gmailReadonlyScope];
+  /// Solo lectura de Gmail. Se pide al pulsar «Conectar con Google»
+  /// en la importación de correos, no al iniciar sesión en KakeiboPro.
+  static const mailReadScopes = [gmail.GmailApi.gmailReadonlyScope];
 
-  final _googleSignIn = GoogleSignIn(scopes: _scopes);
-  final _log = Logger();
-
+  GoogleSignIn? _googleSignIn;
   GoogleSignInAccount? _account;
 
   bool get isSignedIn => _account != null;
   String? get userEmail => _account?.email;
 
+  GoogleSignIn _mailClient() {
+    return _googleSignIn ??= GoogleSignIn(scopes: mailReadScopes);
+  }
+
   Future<void> signIn() async {
-    _account = await _googleSignIn.signIn();
+    _account = await _mailClient().signIn();
     if (_account == null) throw Exception('Inicio de sesión cancelado');
   }
 
   Future<void> signOut() async {
-    await _googleSignIn.signOut();
+    await revokeGrantedAccess();
+  }
+
+  /// Revoca el permiso de Gmail si había una sesión guardada.
+  /// No abre el consentimiento: [signInSilently] no muestra pantalla.
+  Future<void> revokeGrantedAccess() async {
+    final client = _mailClient();
+    try {
+      _account ??= await client.signInSilently();
+    } catch (error, stackTrace) {
+      appLogger.w(
+        'Gmail: no había una sesión silenciosa que cerrar',
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+    try {
+      await client.disconnect();
+    } catch (error, stackTrace) {
+      appLogger.w(
+        'Gmail: no se pudo revocar el acceso',
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
     _account = null;
   }
 
@@ -34,7 +62,7 @@ class GmailService {
   Future<List<BankEmail>> fetchBankEmails({int daysBack = 90}) async {
     if (_account == null) throw Exception('No hay sesión de Gmail activa');
 
-    final httpClient = await _googleSignIn.authenticatedClient();
+    final httpClient = await _mailClient().authenticatedClient();
     if (httpClient == null) throw Exception('No se pudo obtener cliente OAuth2');
 
     final gmailApi = gmail.GmailApi(httpClient);
@@ -98,7 +126,7 @@ class GmailService {
       } catch (error, stackTrace) {
         // Loguear pero continuar: un correo mal formado no debe romper el lote.
         // Si Gmail API devuelve cuota agotada (403), lo veremos en logs.
-        _log.w(
+        appLogger.w(
           'GmailService: correo id=${msg.id} no pudo ser parseado',
           error: error,
           stackTrace: stackTrace,

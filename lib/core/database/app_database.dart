@@ -198,6 +198,36 @@ class AppDatabase extends _$AppDatabase {
     };
   }
 
+  /// Borra los datos locales. El archivo cifrado y su clave se conservan
+  /// para que el siguiente arranque pueda abrir una base vacía.
+  Future<void> wipeAllLocalData() {
+    return transaction(() async {
+      await delete(transactionsTable).go();
+      await delete(syncQueueTable).go();
+      await delete(kakeiboReflectionsTable).go();
+      await delete(savingsGoalsTable).go();
+      await delete(envelopesTable).go();
+      await delete(familyMembersTable).go();
+      await delete(userProfilesTable).go();
+    });
+  }
+
+  /// Limpia el almacenamiento seguro y vuelve a guardar la clave de SQLCipher.
+  static Future<void> clearSecureStoragePreservingDbKey() async {
+    const storage = FlutterSecureStorage(
+      aOptions: AndroidOptions(encryptedSharedPreferences: true),
+    );
+    const keyName = 'kakeibo_db_encryption_key';
+    final key = await storage.read(key: keyName);
+    try {
+      await storage.deleteAll();
+    } finally {
+      if (key != null && key.isNotEmpty) {
+        await storage.write(key: keyName, value: key);
+      }
+    }
+  }
+
   /// Retorna la ruta absoluta del archivo de base de datos en el dispositivo.
   static Future<String> getDatabasePath() async {
     final dir = await getApplicationDocumentsDirectory();

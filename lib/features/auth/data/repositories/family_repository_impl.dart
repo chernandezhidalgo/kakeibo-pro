@@ -233,13 +233,16 @@ class FamilyRepositoryImpl implements FamilyRepository {
         );
       }
 
-      // Buscar el miembro pendiente con ese token
-      final memberData = await _client
-          .from('family_members')
-          .select()
-          .eq('invitation_token', token)
-          .maybeSingle();
-
+      // La fila pendiente no es visible por RLS. El RPC valida el token,
+      // la caducidad y que el rol de la invitación no cambie.
+      final raw = await _client.rpc(
+        'accept_family_invitation',
+        params: {'p_token': token.trim()},
+      );
+      final memberData = switch (raw) {
+        final Map rawMap => Map<String, dynamic>.from(rawMap),
+        _ => null,
+      };
       if (memberData == null) {
         return (
           data: null,
@@ -247,30 +250,7 @@ class FamilyRepositoryImpl implements FamilyRepository {
         );
       }
 
-      // Verificar expiración
-      final expiresAt =
-          DateTime.parse(memberData['invitation_expires_at'] as String);
-      if (DateTime.now().isAfter(expiresAt)) {
-        return (
-          data: null,
-          failure: const AuthFailure('El token de invitación ha expirado'),
-        );
-      }
-
-      // Asignar el userId al miembro pendiente y activarlo
-      final updated = await _client
-          .from('family_members')
-          .update({
-            'user_id': currentUserId,
-            'is_active': true,
-            'invitation_token': null,
-            'invitation_expires_at': null,
-          })
-          .eq('id', memberData['id'] as String)
-          .select()
-          .single();
-
-      return (data: _mapMember(updated), failure: null);
+      return (data: _mapMember(memberData), failure: null);
     } on PostgrestException catch (e) {
       return (data: null, failure: AuthFailure(e.message));
     } catch (e) {

@@ -1,0 +1,8 @@
+project_id = "kakeibopro"
+
+# Solo declara la función de borrar cuenta.
+# El resto de la configuración del proyecto vive en el panel de Supabase.
+# Despliegue: supabase/functions/delete-account/README.md
+
+[functions.delete-account]
+verify_jwt = true

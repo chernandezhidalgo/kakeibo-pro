@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:kakeibo_pro/core/constants/app_colors.dart';
+import 'package:kakeibo_pro/core/database/database_provider.dart';
 import 'package:kakeibo_pro/core/purchases/purchases_provider.dart';
+import 'package:kakeibo_pro/features/auth/data/services/delete_account_service.dart';
+import 'package:kakeibo_pro/features/auth/domain/delete_account_confirmation.dart';
 import 'package:kakeibo_pro/features/auth/presentation/providers/auth_provider.dart';
 
 class SettingsPage extends ConsumerWidget {
@@ -101,6 +104,7 @@ class SettingsPage extends ConsumerWidget {
             subtitle: null,
             onTap: () => _confirmSignOut(context, ref),
           ),
+          const _DeleteAccountTile(),
 
           const SizedBox(height: 24),
 
@@ -154,6 +158,197 @@ class SettingsPage extends ConsumerWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _DeleteAccountTile extends ConsumerStatefulWidget {
+  const _DeleteAccountTile();
+
+  @override
+  ConsumerState<_DeleteAccountTile> createState() => _DeleteAccountTileState();
+}
+
+class _DeleteAccountTileState extends ConsumerState<_DeleteAccountTile> {
+  bool _busy = false;
+
+  Future<void> _start() async {
+    if (_busy) return;
+    final first = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1E1E1E),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Eliminar cuenta',
+          style: TextStyle(
+            color: AppColors.textPrimary,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        content: const Text(
+          'Se borra tu usuario y no se puede deshacer.\n\n'
+          'Si eres la única persona de la familia, también se borra el '
+          'presupuesto. Si hay otras personas y eres el único administrador, '
+          'otra persona pasa a ser administradora y el presupuesto compartido '
+          'se queda con ellas. Tus reflexiones personales se eliminan.\n\n'
+          'La suscripción de Google Play, si la tienes, no se cancela sola.',
+          style: TextStyle(color: AppColors.textMuted, fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text(
+              'Cancelar',
+              style: TextStyle(color: AppColors.textMuted),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text(
+              'Continuar',
+              style: TextStyle(
+                color: AppColors.error,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (first != true || !mounted) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => const _TypeToConfirmDialog(),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _busy = true);
+    final navigator = Navigator.of(context, rootNavigator: true);
+    final messenger = ScaffoldMessenger.of(context);
+    final dialogRoute = DialogRoute<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(
+        child: CircularProgressIndicator(color: AppColors.green),
+      ),
+    );
+    navigator.push(dialogRoute);
+
+    try {
+      final service = DeleteAccountService(
+        client: ref.read(supabaseClientProvider),
+        database: ref.read(appDatabaseProvider),
+        purchases: ref.read(purchasesServiceProvider),
+      );
+      await service.deleteAccount();
+    } on DeleteAccountException catch (error) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(error.message),
+          backgroundColor: AppColors.error,
+        ),
+      );
+    } catch (_) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text(
+            'No se pudo eliminar la cuenta. Inténtalo de nuevo.',
+          ),
+          backgroundColor: AppColors.error,
+        ),
+      );
+    } finally {
+      if (dialogRoute.isActive) {
+        navigator.removeRoute(dialogRoute);
+      }
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _SettingsTile(
+      icon: Icons.delete_forever_outlined,
+      iconColor: AppColors.error,
+      title: 'Eliminar cuenta',
+      subtitle: _busy
+          ? 'Eliminando cuenta…'
+          : 'Borra tu usuario y los datos de esta cuenta',
+      onTap: _busy ? null : _start,
+    );
+  }
+}
+
+class _TypeToConfirmDialog extends StatefulWidget {
+  const _TypeToConfirmDialog();
+
+  @override
+  State<_TypeToConfirmDialog> createState() => _TypeToConfirmDialogState();
+}
+
+class _TypeToConfirmDialogState extends State<_TypeToConfirmDialog> {
+  final _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final matches = deleteAccountPhraseMatches(_controller.text);
+    return AlertDialog(
+      backgroundColor: const Color(0xFF1E1E1E),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: const Text(
+        'Confirmación final',
+        style: TextStyle(
+          color: AppColors.textPrimary,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Escribe ELIMINAR para borrar la cuenta.',
+            style: TextStyle(color: AppColors.textMuted, fontSize: 14),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _controller,
+            autofocus: true,
+            autocorrect: false,
+            enableSuggestions: false,
+            style: const TextStyle(color: AppColors.textPrimary),
+            decoration: const InputDecoration(labelText: 'ELIMINAR'),
+            onChanged: (_) => setState(() {}),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: const Text(
+            'Cancelar',
+            style: TextStyle(color: AppColors.textMuted),
+          ),
+        ),
+        TextButton(
+          onPressed: matches ? () => Navigator.of(context).pop(true) : null,
+          child: const Text(
+            'Eliminar cuenta',
+            style: TextStyle(
+              color: AppColors.error,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

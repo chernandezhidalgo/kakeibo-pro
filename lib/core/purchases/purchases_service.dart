@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:kakeibo_pro/core/logging/app_logger.dart';
 import 'package:purchases_flutter/purchases_flutter.dart';
 
 /// Identificadores de entitlements en RevenueCat.
@@ -100,6 +101,21 @@ class PurchasesService {
       rethrow;
     } catch (_) {
       return false;
+    }
+  }
+
+  /// Separa la identidad de RevenueCat en este teléfono.
+  /// No cancela la suscripción en Google Play.
+  Future<void> logOut() async {
+    if (kIsWeb || !_configured) return;
+    try {
+      await Purchases.logOut();
+    } catch (error, stackTrace) {
+      appLogger.w(
+        'RevenueCat logOut',
+        error: error,
+        stackTrace: stackTrace,
+      );
     }
   }
 
