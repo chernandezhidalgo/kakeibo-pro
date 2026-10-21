@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:extension_google_sign_in_as_googleapis_auth/extension_google_sign_in_as_googleapis_auth.dart';
 import 'package:googleapis/gmail/v1.dart' as gmail;
+import 'package:logger/logger.dart';
 
 import 'package:kakeibo_pro/features/email/domain/models/bank_email.dart';
 import 'package:kakeibo_pro/features/email/domain/parsers/bac_email_parser.dart';
@@ -12,6 +13,7 @@ class GmailService {
   static const _scopes = [gmail.GmailApi.gmailReadonlyScope];
 
   final _googleSignIn = GoogleSignIn(scopes: _scopes);
+  final _log = Logger();
 
   GoogleSignInAccount? _account;
 
@@ -93,8 +95,14 @@ class GmailService {
         }
 
         results.add(email);
-      } catch (_) {
-        // Ignorar correos que no se puedan parsear
+      } catch (error, stackTrace) {
+        // Loguear pero continuar: un correo mal formado no debe romper el lote.
+        // Si Gmail API devuelve cuota agotada (403), lo veremos en logs.
+        _log.w(
+          'GmailService: correo id=${msg.id} no pudo ser parseado',
+          error: error,
+          stackTrace: stackTrace,
+        );
         continue;
       }
     }

@@ -1,4 +1,4 @@
-﻿name: kakeibo_pro
+name: kakeibo_pro
 description: KakeiboPro - App de finanzas familiares para la familia Hernandez-Romero
 publish_to: 'none'
 version: 1.0.0+1
@@ -70,6 +70,7 @@ dependencies:
 
   # Suscripciones in-app (RevenueCat)
   purchases_flutter: ^8.2.4
+  google_generative_ai: ^0.4.7
 
 dev_dependencies:
   flutter_test:

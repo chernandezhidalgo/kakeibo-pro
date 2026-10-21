@@ -67,12 +67,14 @@ Future<void> main() async {
 
   // 4. RevenueCat — configurar antes de runApp.
   //    REVENUECAT_API_KEY se inyecta con --dart-define en builds de producción.
-  //    En desarrollo (key vacía) el servicio queda silencioso (modo demo).
+  //    En desarrollo (defaultValue '') el servicio queda silencioso (modo demo).
+  //    PurchasesService.configure() ya ignora cadenas vacías y el placeholder
+  //    'TU_REVENUECAT_API_KEY' para evitar inicializaciones inválidas.
   if (!kIsWeb) {
     await PurchasesService().configure(
       const String.fromEnvironment(
         'REVENUECAT_API_KEY',
-        defaultValue: 'TU_REVENUECAT_API_KEY',
+        defaultValue: '',
       ),
       '', // userId se actualiza después del login via authStateProvider
     );
@@ -363,52 +365,55 @@ class _KakeiboAppState extends ConsumerState<KakeiboApp> {
       routerConfig: _router,
       title: AppStrings.appName,
       debugShowCheckedModeBanner: false,
-      theme: _buildDarkTheme(),
+      theme: _kDarkTheme,
     );
   }
-
-  // ── Tema oscuro ────────────────────────────────────────────────────────
-
-  ThemeData _buildDarkTheme() => ThemeData(
-        brightness: Brightness.dark,
-        scaffoldBackgroundColor: AppColors.background,
-        colorScheme: const ColorScheme.dark(
-          surface: AppColors.surface,
-          primary: AppColors.green,
-          secondary: AppColors.blue,
-          error: AppColors.error,
-          onPrimary: Colors.black,
-          onSurface: AppColors.textPrimary,
-        ),
-        appBarTheme: const AppBarTheme(
-          backgroundColor: AppColors.surface,
-          foregroundColor: AppColors.textPrimary,
-          elevation: 0,
-        ),
-        elevatedButtonTheme: ElevatedButtonThemeData(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.green,
-            foregroundColor: Colors.black,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-        ),
-        inputDecorationTheme: InputDecorationTheme(
-          filled: true,
-          fillColor: AppColors.surface,
-          labelStyle: const TextStyle(color: AppColors.textMuted),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: AppColors.border),
-          ),
-        ),
-        textTheme: const TextTheme(
-          bodyMedium: TextStyle(color: AppColors.textPrimary),
-          bodySmall: TextStyle(color: AppColors.textMuted),
-        ),
-      );
 }
+
+// ── Tema oscuro ──────────────────────────────────────────────────────────────
+//
+// Definido como constante de nivel superior para que se construya una sola vez
+// por proceso, evitando reconstruir el ThemeData en cada build de KakeiboApp.
+
+final ThemeData _kDarkTheme = ThemeData(
+  brightness: Brightness.dark,
+  scaffoldBackgroundColor: AppColors.background,
+  colorScheme: const ColorScheme.dark(
+    surface: AppColors.surface,
+    primary: AppColors.green,
+    secondary: AppColors.blue,
+    error: AppColors.error,
+    onPrimary: Colors.black,
+    onSurface: AppColors.textPrimary,
+  ),
+  appBarTheme: const AppBarTheme(
+    backgroundColor: AppColors.surface,
+    foregroundColor: AppColors.textPrimary,
+    elevation: 0,
+  ),
+  elevatedButtonTheme: ElevatedButtonThemeData(
+    style: ElevatedButton.styleFrom(
+      backgroundColor: AppColors.green,
+      foregroundColor: Colors.black,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
+    ),
+  ),
+  inputDecorationTheme: InputDecorationTheme(
+    filled: true,
+    fillColor: AppColors.surface,
+    labelStyle: const TextStyle(color: AppColors.textMuted),
+    border: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: const BorderSide(color: AppColors.border),
+    ),
+  ),
+  textTheme: const TextTheme(
+    bodyMedium: TextStyle(color: AppColors.textPrimary),
+    bodySmall: TextStyle(color: AppColors.textMuted),
+  ),
+);
 
 // ── Route Error Fallback ──────────────────────────────────────────────────────
 
