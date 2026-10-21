@@ -1,13 +1,13 @@
 import 'package:firebase_core/firebase_core.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:kakeibo_pro/core/logging/app_logger.dart';
 import 'package:kakeibo_pro/core/notifications/notification_service.dart';
 import 'package:kakeibo_pro/core/purchases/purchases_service.dart';
 import 'package:kakeibo_pro/features/paywall/presentation/pages/paywall_page.dart';
 import 'package:kakeibo_pro/features/settings/presentation/pages/settings_page.dart';
-import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:go_router/go_router.dart';
 import 'package:kakeibo_pro/core/constants/app_colors.dart';
 import 'package:kakeibo_pro/core/constants/app_strings.dart';
@@ -45,6 +45,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  _installLocalErrorLogging();
 
   // 1. Supabase — lee variables inyectadas en tiempo de compilación:
   //    flutter run --dart-define=SUPABASE_URL=... --dart-define=SUPABASE_ANON_KEY=...
@@ -67,12 +68,14 @@ Future<void> main() async {
 
   // 4. RevenueCat — configurar antes de runApp.
   //    REVENUECAT_API_KEY se inyecta con --dart-define en builds de producción.
-  //    En desarrollo (key vacía) el servicio queda silencioso (modo demo).
+  //    En desarrollo (defaultValue '') el servicio queda silencioso (modo demo).
+  //    PurchasesService.configure() ya ignora cadenas vacías y el placeholder
+  //    'TU_REVENUECAT_API_KEY' para evitar inicializaciones inválidas.
   if (!kIsWeb) {
     await PurchasesService().configure(
       const String.fromEnvironment(
         'REVENUECAT_API_KEY',
-        defaultValue: 'TU_REVENUECAT_API_KEY',
+        defaultValue: '',
       ),
       '', // userId se actualiza después del login via authStateProvider
     );
@@ -85,25 +88,6 @@ Future<void> main() async {
     ConnectivityListener.start();
   }
 
-  // 6. Sentry — inicializa monitoreo de errores y performance.
-  //    SENTRY_DSN vacío en desarrollo = Sentry silencioso (sin enviar datos).
-  //    NOTA: Se usa sin appRunner para evitar el Zone mismatch con el binding
-  //    que ya fue inicializado en la zona raíz (línea 1 del main).
-  await SentryFlutter.init(
-    (options) {
-      options.dsn = const String.fromEnvironment(
-        'SENTRY_DSN',
-        defaultValue: '', // vacío en dev — sin telemetría
-      );
-      options.tracesSampleRate = 0.2; // 20% de transacciones
-      options.environment = const String.fromEnvironment(
-        'APP_ENV',
-        defaultValue: 'development',
-      );
-      options.debug = false;
-    },
-  );
-
   // runApp se ejecuta en la misma zona donde se llamó ensureInitialized().
   runApp(
     ProviderScope(
@@ -113,6 +97,26 @@ Future<void> main() async {
       child: const KakeiboApp(),
     ),
   );
+}
+
+/// Errores de framework y zonas no capturadas. Se quedan en el dispositivo.
+void _installLocalErrorLogging() {
+  FlutterError.onError = (details) {
+    appLogger.e(
+      'Error de Flutter',
+      error: details.exception,
+      stackTrace: details.stack,
+    );
+    FlutterError.presentError(details);
+  };
+  PlatformDispatcher.instance.onError = (error, stack) {
+    appLogger.e(
+      'Error no capturado',
+      error: error,
+      stackTrace: stack,
+    );
+    return true;
+  };
 }
 
 // ── App raíz ──────────────────────────────────────────────────────────────────
@@ -363,52 +367,55 @@ class _KakeiboAppState extends ConsumerState<KakeiboApp> {
       routerConfig: _router,
       title: AppStrings.appName,
       debugShowCheckedModeBanner: false,
-      theme: _buildDarkTheme(),
+      theme: _kDarkTheme,
     );
   }
-
-  // ── Tema oscuro ────────────────────────────────────────────────────────
-
-  ThemeData _buildDarkTheme() => ThemeData(
-        brightness: Brightness.dark,
-        scaffoldBackgroundColor: AppColors.background,
-        colorScheme: const ColorScheme.dark(
-          surface: AppColors.surface,
-          primary: AppColors.green,
-          secondary: AppColors.blue,
-          error: AppColors.error,
-          onPrimary: Colors.black,
-          onSurface: AppColors.textPrimary,
-        ),
-        appBarTheme: const AppBarTheme(
-          backgroundColor: AppColors.surface,
-          foregroundColor: AppColors.textPrimary,
-          elevation: 0,
-        ),
-        elevatedButtonTheme: ElevatedButtonThemeData(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.green,
-            foregroundColor: Colors.black,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-        ),
-        inputDecorationTheme: InputDecorationTheme(
-          filled: true,
-          fillColor: AppColors.surface,
-          labelStyle: const TextStyle(color: AppColors.textMuted),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: AppColors.border),
-          ),
-        ),
-        textTheme: const TextTheme(
-          bodyMedium: TextStyle(color: AppColors.textPrimary),
-          bodySmall: TextStyle(color: AppColors.textMuted),
-        ),
-      );
 }
+
+// ── Tema oscuro ──────────────────────────────────────────────────────────────
+//
+// Definido como constante de nivel superior para que se construya una sola vez
+// por proceso, evitando reconstruir el ThemeData en cada build de KakeiboApp.
+
+final ThemeData _kDarkTheme = ThemeData(
+  brightness: Brightness.dark,
+  scaffoldBackgroundColor: AppColors.background,
+  colorScheme: const ColorScheme.dark(
+    surface: AppColors.surface,
+    primary: AppColors.green,
+    secondary: AppColors.blue,
+    error: AppColors.error,
+    onPrimary: Colors.black,
+    onSurface: AppColors.textPrimary,
+  ),
+  appBarTheme: const AppBarTheme(
+    backgroundColor: AppColors.surface,
+    foregroundColor: AppColors.textPrimary,
+    elevation: 0,
+  ),
+  elevatedButtonTheme: ElevatedButtonThemeData(
+    style: ElevatedButton.styleFrom(
+      backgroundColor: AppColors.green,
+      foregroundColor: Colors.black,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
+    ),
+  ),
+  inputDecorationTheme: InputDecorationTheme(
+    filled: true,
+    fillColor: AppColors.surface,
+    labelStyle: const TextStyle(color: AppColors.textMuted),
+    border: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: const BorderSide(color: AppColors.border),
+    ),
+  ),
+  textTheme: const TextTheme(
+    bodyMedium: TextStyle(color: AppColors.textPrimary),
+    bodySmall: TextStyle(color: AppColors.textMuted),
+  ),
+);
 
 // ── Route Error Fallback ──────────────────────────────────────────────────────
 

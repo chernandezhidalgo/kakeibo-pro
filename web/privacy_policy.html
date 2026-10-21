@@ -1,45 +1,31 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Política de Privacidad — KakeiboPro</title>
-  <style>
-    body { font-family: Arial, sans-serif; max-width: 800px; margin: 40px auto; padding: 20px; color: #333; }
-    h1 { color: #1a1a2e; }
-    h2 { color: #3dd68c; }
-  </style>
-</head>
-<body>
-  <h1>Política de Privacidad de KakeiboPro</h1>
-  <p><strong>Última actualización:</strong> Abril 2026</p>
-
-  <h2>1. Información que recopilamos</h2>
-  <p>KakeiboPro recopila únicamente la información necesaria para el funcionamiento de la app:</p>
-  <ul>
-    <li>Correo electrónico para autenticación</li>
-    <li>Datos financieros ingresados por el usuario (transacciones, presupuestos, metas)</li>
-    <li>Correos bancarios (solo lectura, con autorización explícita del usuario)</li>
-  </ul>
-
-  <h2>2. Cómo usamos la información</h2>
-  <p>La información se usa exclusivamente para:</p>
-  <ul>
-    <li>Proveer las funcionalidades de la app al usuario y su familia</li>
-    <li>Sincronizar datos entre dispositivos del mismo grupo familiar</li>
-    <li>Detectar transacciones bancarias en correos autorizados</li>
-  </ul>
-
-  <h2>3. Almacenamiento y seguridad</h2>
-  <p>Los datos se almacenan de forma cifrada localmente (SQLCipher) y en la nube mediante Supabase con cifrado en tránsito (HTTPS/TLS). No vendemos ni compartimos datos con terceros.</p>
-
-  <h2>4. Correos electrónicos</h2>
-  <p>Si el usuario conecta su cuenta de Gmail u Outlook, KakeiboPro accede únicamente a correos de remitentes bancarios autorizados por el usuario. No almacenamos el contenido completo de los correos.</p>
-
-  <h2>5. Derechos del usuario</h2>
-  <p>El usuario puede solicitar la eliminación de todos sus datos en cualquier momento desde Configuración → Eliminar cuenta.</p>
-
-  <h2>6. Contacto</h2>
-  <p>Para consultas sobre privacidad: <a href="mailto:chernandezhidalgo@gmail.com">chernandezhidalgo@gmail.com</a></p>
-</body>
-</html>
+<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Política de privacidad - KakeiboPro</title></head><body style="font-family:sans-serif;max-width:760px;margin:auto;padding:16px">
+<h1>Política de privacidad de KakeiboPro Finanzas Familiares</h1>
+<p>Última actualización: 21 de octubre de 2026</p>
+<p>KakeiboPro (paquete com.hernandezromero.kakeibo_pro), desarrollada por Carlos Hernández, es una aplicación de presupuesto familiar basada en el método Kakeibo. Esta política explica qué datos tratamos y cómo.</p>
+<h2>1. Datos que recopilamos</h2>
+<ul><li><b>Datos de cuenta:</b> correo electrónico y contraseña (almacenada cifrada por nuestro proveedor de autenticación) para iniciar sesión.</li>
+<li><b>Datos financieros que tú ingresas:</b> ingresos, gastos, categorías, montos, notas, metas de ahorro y reflexiones mensuales.</li>
+<li><b>Datos de grupo familiar:</b> si invitas a otros miembros, su correo electrónico para compartir el presupuesto.</li>
+<li><b>Datos de compras:</b> estado de tu suscripción e historial de compras dentro de la app (gestionados por Google Play y RevenueCat). No vemos ni guardamos datos de tarjetas.</li>
+<li><b>Notificaciones:</b> un identificador del dispositivo para enviarte avisos (Firebase Cloud Messaging).</li>
+<li><b>Imágenes de recibos (si usas el escaneo):</b> el texto se reconoce en el propio teléfono con ML Kit; la imagen no se sube a nuestros servidores.</li>
+<li><b>Funciones de inteligencia artificial:</b> cuando usas el asistente o las sugerencias, el texto necesario (por ejemplo, descripciones y montos de gastos) se envía a Google Gemini para generar la respuesta.</li>
+<li><b>Correo electrónico (opcional):</b> si conectas tu cuenta de Gmail u Outlook, la app lee en modo solo lectura los correos de comprobantes y facturas para proponerte gastos. No enviamos, borramos ni modificamos correos. Puedes desconectar la cuenta cuando quieras.</li></ul>
+<h2>Uso de datos de Google (Gmail)</h2>
+<p>El uso y la transferencia a cualquier otra aplicación de la información recibida de las API de Google por parte de KakeiboPro cumplirá la <a href="https://developers.google.com/terms/api-services-user-data-policy">Política de datos de usuario de los servicios de API de Google</a>, incluidos los requisitos de Uso Limitado. Los datos de Gmail se usan solo para detectar gastos y nunca para publicidad, ni se venden, ni los leen personas, salvo con tu consentimiento expreso, por seguridad o por obligación legal.</p>
+<p>No recopilamos ubicación ni contactos, ni credenciales bancarias. No mostramos publicidad.</p>
+<h2>2. Para qué usamos los datos</h2>
+<p>Únicamente para ofrecer el funcionamiento de la app: autenticarte, guardar y sincronizar tu presupuesto entre dispositivos y compartirlo con los miembros de tu familia que tú autorices. No vendemos tus datos ni los usamos para publicidad o perfiles.</p>
+<h2>3. Dónde se guardan y con quién se comparten</h2>
+<p>Usamos estos proveedores, que tratan los datos solo por cuenta nuestra: Supabase (autenticación y base de datos), Google Firebase Cloud Messaging (notificaciones), Google Gemini (funciones de IA), Google (Gmail API) y Microsoft (Outlook/Graph) para la lectura de correos que autorices y RevenueCat (gestión de suscripciones). Toda la comunicación viaja cifrada mediante HTTPS/TLS, y la copia local en tu teléfono se guarda en una base de datos cifrada (SQLCipher). No compartimos datos con otros terceros salvo obligación legal.</p>
+<h2>4. Conservación</h2>
+<p>Conservamos tus datos mientras tu cuenta esté activa. Desde la app, la eliminación es inmediata. Si la pides por correo, la completamos en un máximo de 30 días.</p>
+<h2>5. Eliminación de cuenta y derechos</h2>
+<p>Puedes eliminar tu cuenta desde la app, en <b>Configuración &gt; Cuenta &gt; Eliminar cuenta</b>, o escribiendo a <a href="mailto:info.kakeibopro@gmail.com">info.kakeibopro@gmail.com</a> con el asunto "Eliminar cuenta KakeiboPro". Si eres la única persona de tu familia, también se borra ese presupuesto. Si la compartes, el presupuesto se queda para los demás y, si eras el único administrador, ese rol pasa a otra persona. También puedes solicitar acceso, corrección o copia de tus datos, conforme a la Ley 8968 de Protección de la Persona frente al Tratamiento de sus Datos Personales de Costa Rica.</p>
+<h2>6. Menores</h2>
+<p>KakeiboPro está dirigida a personas adultas y no está diseñada para menores de 13 años.</p>
+<h2>7. Cambios</h2>
+<p>Publicaremos cualquier cambio en esta página con su nueva fecha.</p>
+<h2>8. Contacto</h2>
+<p>Carlos Hernández, Costa Rica. <a href="mailto:info.kakeibopro@gmail.com">info.kakeibopro@gmail.com</a></p>
+</body></html>

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:msal_flutter/msal_flutter.dart';
+import 'package:kakeibo_pro/core/logging/app_logger.dart';
 import 'package:kakeibo_pro/features/email/domain/models/bank_email.dart';
 
 /// Servicio de Outlook/Microsoft Graph para importar correos bancarios.
@@ -19,7 +20,10 @@ class OutlookService {
   static const _clientId =
       String.fromEnvironment('MSAL_CLIENT_ID', defaultValue: '');
   static const _authority = 'https://login.microsoftonline.com/common';
-  static const _scopes = ['Mail.Read'];
+
+  /// Mail.Read solo se envía en [signIn], cuando la persona conecta Outlook.
+  /// El inicio de sesión de KakeiboPro no llama a MSAL.
+  static const mailReadScopes = ['Mail.Read'];
 
   PublicClientApplication? _pca;
   bool _isSignedIn = false;
@@ -52,7 +56,7 @@ class OutlookService {
     try {
       // acquireToken recibe la lista de scopes como argumento posicional
       // y devuelve el JWT access token como String.
-      final token = await _pca!.acquireToken(_scopes);
+      final token = await _pca!.acquireToken(mailReadScopes);
       _accessToken = token;
       _isSignedIn = true;
       _userEmail = _extractEmailFromJwt(token);
@@ -63,13 +67,28 @@ class OutlookService {
     }
   }
 
-  /// Cierra sesión limpiando el estado local.
-  ///
-  /// La sesión MSAL expirará de forma natural en el servidor.
+  /// Cierra la sesión de Microsoft y borra el token en caché.
   Future<void> signOut() async {
+    await revokeGrantedAccess();
+  }
+
+  /// Cierra MSAL aunque esta instancia no haya iniciado sesión antes.
+  /// No pide Mail.Read: [logout] no muestra el consentimiento.
+  Future<void> revokeGrantedAccess() async {
     _isSignedIn = false;
     _userEmail = null;
     _accessToken = null;
+    if (_clientId.isEmpty) return;
+    try {
+      await initialize();
+      await _pca?.logout();
+    } catch (error, stackTrace) {
+      appLogger.w(
+        'Outlook: no se pudo cerrar la sesión de Microsoft',
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
   }
 
   /// Obtiene correos bancarios desde Outlook via Microsoft Graph.

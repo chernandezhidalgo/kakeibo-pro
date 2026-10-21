@@ -29,6 +29,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
   // ── Acciones ───────────────────────────────────────────────────────────
 
+  /// Email y contraseña. Los permisos de correo se piden al conectar
+  /// la importación, no en este inicio de sesión.
   Future<void> _signIn() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
     setState(() => _isLoading = true);

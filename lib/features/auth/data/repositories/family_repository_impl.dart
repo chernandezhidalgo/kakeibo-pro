@@ -26,7 +26,7 @@ class FamilyRepositoryImpl implements FamilyRepository {
       KakeiboFamily(
         id: data['id'] as String,
         name: data['name'] as String,
-        createdAt: DateTime.parse(data['created_at'] as String),
+        createdAt: _parseTimestamp(data['created_at']),
         members: members,
       );
 
@@ -35,12 +35,19 @@ class FamilyRepositoryImpl implements FamilyRepository {
         familyId: data['family_id'] as String,
         // user_id es nullable en DB (miembro pendiente de invitación)
         userId: data['user_id'] as String? ?? '',
-        displayName: data['display_name'] as String,
+        displayName: data['display_name'] as String? ?? 'Miembro',
         role: _roleFromString(data['role'] as String),
         avatarEmoji: data['avatar_emoji'] as String? ?? '👤',
         isActive: data['is_active'] as bool? ?? true,
-        createdAt: DateTime.parse(data['created_at'] as String),
+        createdAt: _parseTimestamp(data['created_at']),
       );
+
+  DateTime _parseTimestamp(Object? value) {
+    if (value is String && value.isNotEmpty) {
+      return DateTime.parse(value);
+    }
+    return DateTime.now().toUtc();
+  }
 
   String _roleToString(FamilyMemberRole role) => switch (role) {
         FamilyMemberRole.admin => 'admin',
@@ -72,34 +79,30 @@ class FamilyRepositoryImpl implements FamilyRepository {
         );
       }
 
-      // 1. Insertar familia
-      final familyData = await _client
-          .from('families')
-          .insert({'name': name})
-          .select()
-          .single();
-
-      final familyId = familyData['id'] as String;
-
-      // 2. Insertar al creador como admin
-      // TODO: displayName debería venir del perfil de usuario en Fase 2
-      final displayName =
-          currentUser.email?.split('@').first ?? 'Admin';
-
-      final memberData = await _client
-          .from('family_members')
-          .insert({
-            'family_id': familyId,
-            'user_id': currentUser.id,
-            'display_name': displayName,
-            'role': 'admin',
-            'is_active': true,
-          })
-          .select()
-          .single();
+      // La política de lectura de families exige ser miembro, y el
+      // miembro todavía no existe. create_family inserta los dos.
+      final raw = await _client.rpc(
+        'create_family',
+        params: {'p_name': name},
+      );
+      final payload = switch (raw) {
+        final Map rawMap => Map<String, dynamic>.from(rawMap),
+        _ => null,
+      };
+      final familyRaw = payload?['family'];
+      final memberRaw = payload?['member'];
+      if (familyRaw is! Map || memberRaw is! Map) {
+        return (
+          data: null,
+          failure: const AuthFailure('No se pudo crear la familia'),
+        );
+      }
 
       return (
-        data: _mapFamily(familyData, [_mapMember(memberData)]),
+        data: _mapFamily(
+          Map<String, dynamic>.from(familyRaw),
+          [_mapMember(Map<String, dynamic>.from(memberRaw))],
+        ),
         failure: null,
       );
     } on PostgrestException catch (e) {
@@ -198,17 +201,14 @@ class FamilyRepositoryImpl implements FamilyRepository {
   ) async {
     try {
       final token = const Uuid().v4();
-      final expiresAt = DateTime.now().toUtc().add(const Duration(hours: 48));
 
-      // Crea un miembro "pendiente" sin userId, con el token de invitación
+      // El esquema real guarda la invitación con las columnas confirmadas.
       await _client.from('family_members').insert({
         'family_id': familyId,
         'user_id': null,
-        'display_name': 'Pendiente',
         'role': _roleToString(role),
         'is_active': false,
         'invitation_token': token,
-        'invitation_expires_at': expiresAt.toIso8601String(),
       });
 
       return (data: token, failure: null);
@@ -233,13 +233,16 @@ class FamilyRepositoryImpl implements FamilyRepository {
         );
       }
 
-      // Buscar el miembro pendiente con ese token
-      final memberData = await _client
-          .from('family_members')
-          .select()
-          .eq('invitation_token', token)
-          .maybeSingle();
-
+      // La fila pendiente no es visible por RLS. El RPC valida el token,
+      // la caducidad y que el rol de la invitación no cambie.
+      final raw = await _client.rpc(
+        'accept_family_invitation',
+        params: {'p_token': token.trim()},
+      );
+      final memberData = switch (raw) {
+        final Map rawMap => Map<String, dynamic>.from(rawMap),
+        _ => null,
+      };
       if (memberData == null) {
         return (
           data: null,
@@ -247,30 +250,7 @@ class FamilyRepositoryImpl implements FamilyRepository {
         );
       }
 
-      // Verificar expiración
-      final expiresAt =
-          DateTime.parse(memberData['invitation_expires_at'] as String);
-      if (DateTime.now().isAfter(expiresAt)) {
-        return (
-          data: null,
-          failure: const AuthFailure('El token de invitación ha expirado'),
-        );
-      }
-
-      // Asignar el userId al miembro pendiente y activarlo
-      final updated = await _client
-          .from('family_members')
-          .update({
-            'user_id': currentUserId,
-            'is_active': true,
-            'invitation_token': null,
-            'invitation_expires_at': null,
-          })
-          .eq('id', memberData['id'] as String)
-          .select()
-          .single();
-
-      return (data: _mapMember(updated), failure: null);
+      return (data: _mapMember(memberData), failure: null);
     } on PostgrestException catch (e) {
       return (data: null, failure: AuthFailure(e.message));
     } catch (e) {
