@@ -42,6 +42,8 @@
 --     persona, aunque el nombre real de la columna no se conozca.
 --     Así un ON DELETE CASCADE no se lleva los movimientos compartidos.
 --   * Los índices se crean solo si la columna existe.
+--   * user_profiles y cualquier tabla o columna que no esté en el
+--     esquema real se omite. El script no aborta si no existen.
 --
 -- Qué pasa al eliminar una cuenta (la función no se ejecuta sola):
 --   * Si esa persona es la única cuenta de la familia, se borra la
@@ -101,6 +103,8 @@ DROP FUNCTION IF EXISTS public._delete_family_completely(uuid);
 DROP FUNCTION IF EXISTS public._reassign_authorship(uuid, uuid, uuid, uuid);
 DROP FUNCTION IF EXISTS public._apply_authorship_reassign(text, text, uuid, uuid);
 DROP FUNCTION IF EXISTS public._null_or_reassign(text, text, uuid, uuid);
+DROP FUNCTION IF EXISTS public._member_sort_expr();
+DROP FUNCTION IF EXISTS public._has_table(text);
 DROP FUNCTION IF EXISTS public._has_column(text, text);
 DROP FUNCTION IF EXISTS public.family_member_update_allowed(uuid, uuid, uuid, text, text);
 DROP FUNCTION IF EXISTS public.family_member_update_allowed(uuid, uuid, uuid, text, text, boolean);
@@ -291,6 +295,31 @@ AS $fn$
       AND table_name = p_table
       AND column_name = p_column
   );
+$fn$;
+
+CREATE OR REPLACE FUNCTION public._has_table(p_table text)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $fn$
+  SELECT to_regclass(format('public.%I', p_table)) IS NOT NULL;
+$fn$;
+
+-- Orden estable. created_at solo entra si la columna existe.
+CREATE OR REPLACE FUNCTION public._member_sort_expr()
+RETURNS text
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $fn$
+  SELECT CASE
+    WHEN public._has_column('family_members', 'created_at')
+    THEN 'created_at ASC NULLS LAST'
+    ELSE 'id ASC'
+  END;
 $fn$;
 
 CREATE OR REPLACE FUNCTION public._null_or_reassign(
@@ -713,30 +742,38 @@ DECLARE
   v_fallback uuid;
   v_fallback_user uuid;
 BEGIN
-  SELECT id, user_id
+  EXECUTE format(
+    $q$SELECT id, user_id
+       FROM public.family_members
+       WHERE family_id = $1
+         AND id <> $2
+         AND user_id IS NOT NULL
+         AND user_id IS DISTINCT FROM $3
+       ORDER BY
+         CASE
+           WHEN role = 'admin' AND is_active THEN 0
+           WHEN is_active THEN 1
+           ELSE 2
+         END,
+         %s
+       LIMIT 1$q$,
+    public._member_sort_expr()
+  )
   INTO v_fallback, v_fallback_user
-  FROM public.family_members
-  WHERE family_id = p_family
-    AND id <> p_member
-    AND user_id IS NOT NULL
-    AND user_id IS DISTINCT FROM p_uid
-  ORDER BY
-    CASE
-      WHEN role = 'admin' AND is_active THEN 0
-      WHEN is_active THEN 1
-      ELSE 2
-    END,
-    created_at ASC NULLS LAST
-  LIMIT 1;
+  USING p_family, p_member, p_uid;
 
   IF v_fallback IS NULL THEN
-    SELECT id
+    EXECUTE format(
+      $q$SELECT id
+         FROM public.family_members
+         WHERE family_id = $1
+           AND id <> $2
+         ORDER BY %s
+         LIMIT 1$q$,
+      public._member_sort_expr()
+    )
     INTO v_fallback
-    FROM public.family_members
-    WHERE family_id = p_family
-      AND id <> p_member
-    ORDER BY created_at ASC NULLS LAST
-    LIMIT 1;
+    USING p_family, p_member;
   END IF;
 
   IF to_regclass('public.kakeibo_reflections') IS NOT NULL THEN
@@ -796,10 +833,14 @@ BEGIN
 
   DELETE FROM public._account_deletion_guard WHERE actor = v_uid;
 
-  SELECT coalesce(array_agg(id ORDER BY created_at ASC NULLS LAST), '{}'::uuid[])
+  EXECUTE format(
+    $q$SELECT coalesce(array_agg(id ORDER BY %s), '{}'::uuid[])
+       FROM public.family_members
+       WHERE user_id = $1$q$,
+    public._member_sort_expr()
+  )
   INTO v_member_ids
-  FROM public.family_members
-  WHERE user_id = v_uid;
+  USING v_uid;
 
   FOREACH v_member_id IN ARRAY v_member_ids
   LOOP
@@ -834,20 +875,24 @@ BEGIN
       INTO v_other_admin;
 
       IF v_member.role = 'admin' AND NOT v_other_admin THEN
-        SELECT id
+        EXECUTE format(
+          $q$SELECT id
+             FROM public.family_members
+             WHERE family_id = $1
+               AND user_id IS NOT NULL
+               AND user_id <> $2
+             ORDER BY
+               CASE
+                 WHEN is_active AND role = 'co_admin' THEN 0
+                 WHEN is_active THEN 1
+                 ELSE 2
+               END,
+               %s
+             LIMIT 1$q$,
+          public._member_sort_expr()
+        )
         INTO v_successor
-        FROM public.family_members
-        WHERE family_id = v_member.family_id
-          AND user_id IS NOT NULL
-          AND user_id <> v_uid
-        ORDER BY
-          CASE
-            WHEN is_active AND role = 'co_admin' THEN 0
-            WHEN is_active THEN 1
-            ELSE 2
-          END,
-          created_at ASC NULLS LAST
-        LIMIT 1;
+        USING v_member.family_id, v_uid;
 
         IF v_successor IS NULL THEN
           RAISE EXCEPTION
@@ -889,19 +934,24 @@ BEGIN
     );
   END LOOP;
 
-  IF to_regclass('public.user_profiles') IS NOT NULL THEN
-    DELETE FROM public.user_profiles WHERE id = v_uid;
+  IF public._has_table('user_profiles') THEN
+    EXECUTE 'DELETE FROM public.user_profiles WHERE id = $1'
+    USING v_uid;
   END IF;
 
   -- Segunda pasada: lo que todavía apunte al usuario de Auth,
   -- antes de que la Edge Function borre auth.users.
-  SELECT user_id
+  EXECUTE format(
+    $q$SELECT user_id
+       FROM public.family_members
+       WHERE user_id IS NOT NULL
+         AND user_id <> $1
+       ORDER BY %s
+       LIMIT 1$q$,
+    public._member_sort_expr()
+  )
   INTO v_fallback_user
-  FROM public.family_members
-  WHERE user_id IS NOT NULL
-    AND user_id <> v_uid
-  ORDER BY created_at ASC NULLS LAST
-  LIMIT 1;
+  USING v_uid;
 
   PERFORM public._reassign_authorship(NULL, v_uid, NULL, v_fallback_user);
 
@@ -925,6 +975,7 @@ DECLARE
   v_uid uuid := auth.uid();
   v_count integer;
   v_row public.family_members%ROWTYPE;
+  v_expires timestamptz;
 BEGIN
   IF v_uid IS NULL THEN
     RAISE EXCEPTION 'Usuario no autenticado';
@@ -960,18 +1011,36 @@ BEGIN
     AND user_id IS NULL
   FOR UPDATE;
 
-  IF v_row.invitation_expires_at IS NULL
-     OR v_row.invitation_expires_at <= now() THEN
-    RAISE EXCEPTION 'Token de invitación inválido';
+  IF public._has_column('family_members', 'invitation_expires_at') THEN
+    EXECUTE
+      'SELECT invitation_expires_at
+       FROM public.family_members
+       WHERE id = $1'
+    INTO v_expires
+    USING v_row.id;
+    IF v_expires IS NULL OR v_expires <= now() THEN
+      RAISE EXCEPTION 'Token de invitación inválido';
+    END IF;
+    EXECUTE
+      'UPDATE public.family_members
+       SET user_id = $1,
+           is_active = true,
+           invitation_token = NULL,
+           invitation_expires_at = NULL
+       WHERE id = $2'
+    USING v_uid, v_row.id;
+  ELSE
+    UPDATE public.family_members
+    SET user_id = v_uid,
+        is_active = true,
+        invitation_token = NULL
+    WHERE id = v_row.id;
   END IF;
 
-  UPDATE public.family_members
-  SET user_id = v_uid,
-      is_active = true,
-      invitation_token = NULL,
-      invitation_expires_at = NULL
-  WHERE id = v_row.id
-  RETURNING * INTO v_row;
+  SELECT *
+  INTO v_row
+  FROM public.family_members
+  WHERE id = v_row.id;
 
   RETURN to_jsonb(v_row);
 END;
@@ -989,6 +1058,7 @@ DECLARE
   v_uid uuid := auth.uid();
   v_family public.families%ROWTYPE;
   v_member public.family_members%ROWTYPE;
+  v_member_id uuid;
   v_display text := 'Admin';
   v_email text;
 BEGIN
@@ -1017,10 +1087,9 @@ BEGIN
          AND table_name = 'users'
          AND column_name = 'email'
      ) THEN
-    SELECT email
+    EXECUTE 'SELECT email FROM auth.users WHERE id = $1'
     INTO v_email
-    FROM auth.users
-    WHERE id = v_uid;
+    USING v_uid;
     IF v_email IS NOT NULL AND position('@' IN v_email) > 1 THEN
       v_display := split_part(v_email, '@', 1);
     END IF;
@@ -1030,21 +1099,33 @@ BEGIN
   VALUES (btrim(p_name))
   RETURNING * INTO v_family;
 
-  INSERT INTO public.family_members (
-    family_id,
-    user_id,
-    display_name,
-    role,
-    is_active
-  )
-  VALUES (
-    v_family.id,
-    v_uid,
-    v_display,
-    'admin',
-    true
-  )
-  RETURNING * INTO v_member;
+  IF public._has_column('family_members', 'display_name') THEN
+    EXECUTE
+      'INSERT INTO public.family_members (
+         family_id, user_id, display_name, role, is_active
+       )
+       VALUES ($1, $2, $3, ''admin'', true)
+       RETURNING id'
+    INTO v_member_id
+    USING v_family.id, v_uid, v_display;
+    SELECT * INTO v_member
+    FROM public.family_members
+    WHERE id = v_member_id;
+  ELSE
+    INSERT INTO public.family_members (
+      family_id,
+      user_id,
+      role,
+      is_active
+    )
+    VALUES (
+      v_family.id,
+      v_uid,
+      'admin',
+      true
+    )
+    RETURNING * INTO v_member;
+  END IF;
 
   RETURN jsonb_build_object(
     'family', to_jsonb(v_family),
@@ -1061,6 +1142,9 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
 AS $fn$
+DECLARE
+  v_expires timestamptz;
+  v_new_expires timestamptz;
 BEGIN
   -- Sin sesión de usuario (SQL Editor o service role de mantenimiento).
   IF auth.uid() IS NULL THEN
@@ -1163,18 +1247,29 @@ BEGIN
   END IF;
 
   -- Reclamar invitación: solo hacia uno mismo, sin cambiar el rol.
+  -- invitation_expires_at no está en todos los proyectos.
   IF OLD.user_id IS NULL
      AND OLD.invitation_token IS NOT NULL
      AND NEW.user_id = auth.uid()
      AND NEW.role IS NOT DISTINCT FROM OLD.role
      AND NEW.family_id IS NOT DISTINCT FROM OLD.family_id
      AND NEW.invitation_token IS NULL
-     AND NEW.invitation_expires_at IS NULL
      AND NEW.is_active IS TRUE
   THEN
-    IF OLD.invitation_expires_at IS NULL
-       OR OLD.invitation_expires_at <= now() THEN
-      RAISE EXCEPTION 'Token de invitación inválido';
+    IF public._has_column('family_members', 'invitation_expires_at') THEN
+      EXECUTE
+        'SELECT ($1::public.family_members).invitation_expires_at'
+      INTO v_expires
+      USING OLD;
+      EXECUTE
+        'SELECT ($1::public.family_members).invitation_expires_at'
+      INTO v_new_expires
+      USING NEW;
+      IF v_expires IS NULL
+         OR v_expires <= now()
+         OR v_new_expires IS NOT NULL THEN
+        RAISE EXCEPTION 'Token de invitación inválido';
+      END IF;
     END IF;
     IF EXISTS (
       SELECT 1
@@ -1242,6 +1337,8 @@ BEGIN
   END LOOP;
 
   FOREACH fn IN ARRAY ARRAY[
+    'public._has_table(text)',
+    'public._member_sort_expr()',
     'public._has_column(text,text)',
     'public._null_or_reassign(text,text,uuid,uuid)',
     'public._apply_authorship_reassign(text,text,uuid,uuid)',
@@ -1263,16 +1360,32 @@ $grants$;
 
 -- ── RLS ──────────────────────────────────────────────────────────────────────
 
-ALTER TABLE public.families ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.family_members ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.user_profiles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.envelopes ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.transactions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.kakeibo_reflections ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.savings_goals ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.sync_queue ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.recurring_rules ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.accounts ENABLE ROW LEVEL SECURITY;
+DO $enable_rls$
+DECLARE
+  t text;
+BEGIN
+  FOREACH t IN ARRAY ARRAY[
+    'families',
+    'family_members',
+    'envelopes',
+    'transactions',
+    'kakeibo_reflections',
+    'savings_goals',
+    'sync_queue',
+    'recurring_rules',
+    'accounts',
+    'user_profiles'
+  ]
+  LOOP
+    IF to_regclass(format('public.%I', t)) IS NOT NULL THEN
+      EXECUTE format(
+        'ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY',
+        t
+      );
+    END IF;
+  END LOOP;
+END
+$enable_rls$;
 
 DROP POLICY IF EXISTS "families_select" ON public.families;
 CREATE POLICY "families_select"
@@ -1350,29 +1463,46 @@ USING (
   AND user_id IS DISTINCT FROM (SELECT auth.uid())
 );
 
-DROP POLICY IF EXISTS "user_profiles_select" ON public.user_profiles;
-CREATE POLICY "user_profiles_select"
-ON public.user_profiles FOR SELECT TO authenticated
-USING (
-  id = (SELECT auth.uid())
-  OR public.shares_family_with(id)
-);
+-- user_profiles no está en todos los proyectos. Si no existe, se omite.
+DO $user_profiles$
+BEGIN
+  IF to_regclass('public.user_profiles') IS NULL THEN
+    RETURN;
+  END IF;
 
-DROP POLICY IF EXISTS "user_profiles_insert" ON public.user_profiles;
-CREATE POLICY "user_profiles_insert"
-ON public.user_profiles FOR INSERT TO authenticated
-WITH CHECK (id = (SELECT auth.uid()));
+  EXECUTE 'DROP POLICY IF EXISTS "user_profiles_select" ON public.user_profiles';
+  EXECUTE $pol$
+    CREATE POLICY "user_profiles_select"
+    ON public.user_profiles FOR SELECT TO authenticated
+    USING (
+      id = (SELECT auth.uid())
+      OR public.shares_family_with(id)
+    )
+  $pol$;
 
-DROP POLICY IF EXISTS "user_profiles_update" ON public.user_profiles;
-CREATE POLICY "user_profiles_update"
-ON public.user_profiles FOR UPDATE TO authenticated
-USING (id = (SELECT auth.uid()))
-WITH CHECK (id = (SELECT auth.uid()));
+  EXECUTE 'DROP POLICY IF EXISTS "user_profiles_insert" ON public.user_profiles';
+  EXECUTE $pol$
+    CREATE POLICY "user_profiles_insert"
+    ON public.user_profiles FOR INSERT TO authenticated
+    WITH CHECK (id = (SELECT auth.uid()))
+  $pol$;
 
-DROP POLICY IF EXISTS "user_profiles_delete" ON public.user_profiles;
-CREATE POLICY "user_profiles_delete"
-ON public.user_profiles FOR DELETE TO authenticated
-USING (id = (SELECT auth.uid()));
+  EXECUTE 'DROP POLICY IF EXISTS "user_profiles_update" ON public.user_profiles';
+  EXECUTE $pol$
+    CREATE POLICY "user_profiles_update"
+    ON public.user_profiles FOR UPDATE TO authenticated
+    USING (id = (SELECT auth.uid()))
+    WITH CHECK (id = (SELECT auth.uid()))
+  $pol$;
+
+  EXECUTE 'DROP POLICY IF EXISTS "user_profiles_delete" ON public.user_profiles';
+  EXECUTE $pol$
+    CREATE POLICY "user_profiles_delete"
+    ON public.user_profiles FOR DELETE TO authenticated
+    USING (id = (SELECT auth.uid()))
+  $pol$;
+END
+$user_profiles$;
 
 DROP POLICY IF EXISTS "members_all" ON public.envelopes;
 CREATE POLICY "members_all"
@@ -1506,7 +1636,6 @@ BEGIN
     SELECT unnest(ARRAY[
       'families',
       'family_members',
-      'user_profiles',
       'envelopes',
       'transactions',
       'kakeibo_reflections',
@@ -1524,6 +1653,17 @@ BEGIN
 
   IF v_missing > 0 THEN
     RAISE EXCEPTION 'RLS no quedó activo en todas las tablas';
+  END IF;
+
+  IF to_regclass('public.user_profiles') IS NOT NULL
+     AND NOT EXISTS (
+       SELECT 1
+       FROM pg_tables
+       WHERE schemaname = 'public'
+         AND tablename = 'user_profiles'
+         AND rowsecurity = true
+     ) THEN
+    RAISE EXCEPTION 'user_profiles existe pero RLS no quedó activo';
   END IF;
 
   SELECT count(*) INTO v_bad

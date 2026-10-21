@@ -26,7 +26,7 @@ class FamilyRepositoryImpl implements FamilyRepository {
       KakeiboFamily(
         id: data['id'] as String,
         name: data['name'] as String,
-        createdAt: DateTime.parse(data['created_at'] as String),
+        createdAt: _parseTimestamp(data['created_at']),
         members: members,
       );
 
@@ -35,12 +35,19 @@ class FamilyRepositoryImpl implements FamilyRepository {
         familyId: data['family_id'] as String,
         // user_id es nullable en DB (miembro pendiente de invitación)
         userId: data['user_id'] as String? ?? '',
-        displayName: data['display_name'] as String,
+        displayName: data['display_name'] as String? ?? 'Miembro',
         role: _roleFromString(data['role'] as String),
         avatarEmoji: data['avatar_emoji'] as String? ?? '👤',
         isActive: data['is_active'] as bool? ?? true,
-        createdAt: DateTime.parse(data['created_at'] as String),
+        createdAt: _parseTimestamp(data['created_at']),
       );
+
+  DateTime _parseTimestamp(Object? value) {
+    if (value is String && value.isNotEmpty) {
+      return DateTime.parse(value);
+    }
+    return DateTime.now().toUtc();
+  }
 
   String _roleToString(FamilyMemberRole role) => switch (role) {
         FamilyMemberRole.admin => 'admin',
@@ -194,17 +201,14 @@ class FamilyRepositoryImpl implements FamilyRepository {
   ) async {
     try {
       final token = const Uuid().v4();
-      final expiresAt = DateTime.now().toUtc().add(const Duration(hours: 48));
 
-      // Crea un miembro "pendiente" sin userId, con el token de invitación
+      // El esquema real guarda la invitación con las columnas confirmadas.
       await _client.from('family_members').insert({
         'family_id': familyId,
         'user_id': null,
-        'display_name': 'Pendiente',
         'role': _roleToString(role),
         'is_active': false,
         'invitation_token': token,
-        'invitation_expires_at': expiresAt.toIso8601String(),
       });
 
       return (data: token, failure: null);

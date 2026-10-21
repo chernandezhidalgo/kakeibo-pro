@@ -8,7 +8,7 @@ Borra de verdad el usuario de Supabase Auth y sus datos. No es un cierre de sesi
 - **Es la única cuenta de la familia** (no hay otro `family_members.user_id`): se borra la familia completa. Sobres, movimientos, metas, reflexiones, cuentas, reglas, cola de sincronización e invitaciones pendientes. No queda un grupo sin dueño.
 - **Hay otras cuentas**:
   - El presupuesto compartido se conserva. Quitar los gastos de una persona descuadraría los sobres de quienes se quedan.
-  - Se borran sus reflexiones, su fila de miembro y su perfil.
+  - Se borran sus reflexiones y su fila de miembro. Si existe la tabla `user_profiles`, también se borra su perfil. En el proyecto actual esa tabla no está.
   - Antes de borrar la membresía, las columnas de autoría (`registered_by`, `created_by_user_id` y las equivalentes en metas y reglas, más las claves foráneas que apunten a esa persona) se pasan a quien se queda, o quedan vacías si la columna lo permite. Así el borrado de Auth no arrastra los movimientos compartidos.
   - Si era el único administrador activo, el rol `admin` pasa al co_admin activo más antiguo. Si no hay, al otro miembro activo más antiguo. Si solo quedan miembros inactivos, al más antiguo y se reactiva. También si quien se va es admin pero está inactivo.
 - En los dos casos, esta función borra después el usuario de Auth.

@@ -109,7 +109,8 @@ ORDER BY table_name, column_name;
 
 5. Pulsa **Run**.
 6. Tiene que salir una tabla con nombres de columnas. No tiene que salir un error rojo.
-7. Si `transactions` / `registered_by` no aparece, está bien. La app usa `created_by_user_id`. El arreglo no se cae por una columna que no existe.
+7. Si `transactions` / `registered_by` no aparece, está bien. La app a veces usa `created_by_user_id`. El arreglo no se cae por una columna que no existe.
+8. Si `user_profiles` no aparece, también está bien. En este proyecto esa tabla no existe y el arreglo la salta.
 8. Copia el resultado y guárdalo (un pantallazo alcanza) antes de seguir. Así se sabe qué columnas había.
 9. Esta consulta no guarda ni borra nada. Puedes cerrar ese cuadro.
 

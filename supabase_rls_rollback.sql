@@ -33,6 +33,8 @@ DROP FUNCTION IF EXISTS public._delete_family_completely(uuid);
 DROP FUNCTION IF EXISTS public._reassign_authorship(uuid, uuid, uuid, uuid);
 DROP FUNCTION IF EXISTS public._apply_authorship_reassign(text, text, uuid, uuid);
 DROP FUNCTION IF EXISTS public._null_or_reassign(text, text, uuid, uuid);
+DROP FUNCTION IF EXISTS public._member_sort_expr();
+DROP FUNCTION IF EXISTS public._has_table(text);
 DROP FUNCTION IF EXISTS public._has_column(text, text);
 DROP TABLE IF EXISTS public._account_deletion_guard;
 
