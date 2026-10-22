@@ -48,30 +48,75 @@ jobs:
       - name: Flutter test
         run: flutter test
 
-      # 8. Decodificar keystore desde Secret de GitHub
+      # 8. Comprobar secrets sin imprimir sus valores.
+      # En el push a main del 21-oct-2026 estaban vacíos: el paso de firma
+      # escribía un keystore vacío y contraseñas en blanco.
+      - name: Validate release secrets
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          REVENUECAT_API_KEY: ${{ secrets.REVENUECAT_API_KEY }}
+        run: |
+          missing=()
+          for name in KEYSTORE_BASE64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD SUPABASE_URL SUPABASE_ANON_KEY REVENUECAT_API_KEY; do
+            if [ -z "${!name}" ]; then
+              missing+=("$name")
+            fi
+          done
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "Faltan estos secrets del repositorio (no se imprime ningún valor):"
+            printf ' - %s\n' "${missing[@]}"
+            echo "Añádelos en GitHub → Settings → Secrets and variables → Actions → Repository secrets."
+            exit 1
+          fi
+
+      # 9. Decodificar keystore desde Secret de GitHub
       - name: Decode keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
         run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > android/kakeibopro-release.jks
+          printf '%s' "${KEYSTORE_BASE64}" | base64 --decode > android/kakeibopro-release.jks
+          if [ ! -s android/kakeibopro-release.jks ]; then
+            echo "KEYSTORE_BASE64 se decodificó a un archivo vacío."
+            exit 1
+          fi
 
-      # 9. Crear key.properties con los secrets
+      # 10. Crear key.properties con los secrets
       - name: Create key.properties
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          cat > android/key.properties << EOF
-          storeFile=../kakeibopro-release.jks
-          storePassword=${{ secrets.KEYSTORE_PASSWORD }}
-          keyAlias=${{ secrets.KEY_ALIAS }}
-          keyPassword=${{ secrets.KEY_PASSWORD }}
-          EOF
+          umask 077
+          {
+            echo "storeFile=../kakeibopro-release.jks"
+            printf 'storePassword=%s\n' "${KEYSTORE_PASSWORD}"
+            printf 'keyAlias=%s\n' "${KEY_ALIAS}"
+            printf 'keyPassword=%s\n' "${KEY_PASSWORD}"
+          } > android/key.properties
 
-      # 10. Build App Bundle firmado
+      # 11. Build App Bundle firmado.
+      # El bloque literal conserva los saltos de línea. Un escalar YAML plano
+      # deja el "\" de bash en la misma línea y Flutter toma el primer
+      # --dart-define como archivo de entrada ("Target file not found").
       - name: Build release AAB
-        run: flutter build appbundle --release \
-          --dart-define=SUPABASE_URL=${{ secrets.SUPABASE_URL }} \
-          --dart-define=SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }} \
-          --dart-define=REVENUECAT_API_KEY=${{ secrets.REVENUECAT_API_KEY }} \
-          --dart-define=APP_ENV=production
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          REVENUECAT_API_KEY: ${{ secrets.REVENUECAT_API_KEY }}
+        run: |
+          flutter build appbundle --release \
+            --dart-define=SUPABASE_URL="${SUPABASE_URL}" \
+            --dart-define=SUPABASE_ANON_KEY="${SUPABASE_ANON_KEY}" \
+            --dart-define=REVENUECAT_API_KEY="${REVENUECAT_API_KEY}" \
+            --dart-define=APP_ENV=production
 
-      # 11. Subir AAB como artefacto
+      # 12. Subir AAB como artefacto
       - name: Upload AAB artifact
         uses: actions/upload-artifact@v4
         with:

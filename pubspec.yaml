@@ -90,11 +90,12 @@ flutter:
 
 msix_config:
   display_name: KakeiboPro
-  publisher_display_name: Carlos Hernandez
-  identity_name: CarlosHernandez.KakeiboPro
+  publisher_display_name: CHERNANEZH
+  identity_name: CHERNANEZH.176053EC6CA7A
   msix_version: 1.0.0.0
   description: Finanzas familiares con el metodo Kakeibo
-  publisher: CN=TU_PUBLISHER_ID
+  # Identidad pública de Partner Center (windows/store_identity.txt). No es un secreto.
+  publisher: CN=D957F064-CC18-4AA8-85C5-36637EBEF42F
   languages: es-CR, es, en-US
   capabilities: internetClient
   icons_background_color: transparent

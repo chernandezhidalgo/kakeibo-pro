@@ -94,7 +94,7 @@ class PurchasesService {
           .where((p) => p.identifier == packageIdentifier)
           .firstOrNull;
       if (pkg == null) return false;
-      await Purchases.purchasePackage(pkg);
+      await Purchases.purchase(PurchaseParams.package(pkg));
       return true;
     } on PurchasesErrorCode catch (e) {
       if (e == PurchasesErrorCode.purchaseCancelledError) return false;
