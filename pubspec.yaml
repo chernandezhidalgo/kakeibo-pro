@@ -1,7 +1,7 @@
-name: kakeibo_pro
+﻿name: kakeibo_pro
 description: KakeiboPro - App de finanzas familiares para la familia Hernandez-Romero
 publish_to: 'none'
-version: 1.0.0+2
+version: 1.0.0+4
 
 environment:
   sdk: '>=3.11.3 <4.0.0'
@@ -67,7 +67,7 @@ dependencies:
   msal_flutter: ^2.0.1
 
   # Suscripciones in-app (RevenueCat)
-  purchases_flutter: ^8.2.4
+  purchases_flutter: ^9.0.0
   google_generative_ai: ^0.4.7
 
 dev_dependencies:
@@ -90,11 +90,12 @@ flutter:
 
 msix_config:
   display_name: KakeiboPro
-  publisher_display_name: Carlos Hernandez
-  identity_name: CarlosHernandez.KakeiboPro
+  publisher_display_name: CHERNANEZH
+  identity_name: CHERNANEZH.176053EC6CA7A
   msix_version: 1.0.0.0
   description: Finanzas familiares con el metodo Kakeibo
-  publisher: CN=TU_PUBLISHER_ID
+  # Identidad pública de Partner Center (windows/store_identity.txt). No es un secreto.
+  publisher: CN=D957F064-CC18-4AA8-85C5-36637EBEF42F
   languages: es-CR, es, en-US
   capabilities: internetClient
   icons_background_color: transparent

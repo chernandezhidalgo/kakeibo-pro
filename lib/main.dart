@@ -52,9 +52,17 @@ Future<void> main() async {
   // Inicializar datos de localización para DateFormat en español
   await initializeDateFormatting('es');
 
+  const supabaseUrl = String.fromEnvironment('SUPABASE_URL');
+  const supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
+  if (supabaseUrl.isEmpty || supabaseAnonKey.isEmpty) {
+    throw StateError(
+      'Faltan SUPABASE_URL o SUPABASE_ANON_KEY. Compila con tool/build_release.ps1.',
+    );
+  }
+
   await Supabase.initialize(
-    url: const String.fromEnvironment('SUPABASE_URL'),
-    anonKey: const String.fromEnvironment('SUPABASE_ANON_KEY'),
+    url: supabaseUrl,
+    anonKey: supabaseAnonKey,
   );
 
   // 2. Base de datos local Drift
