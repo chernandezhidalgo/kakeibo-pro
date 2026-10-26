@@ -96,7 +96,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           // ── Mensajes ────────────────────────────────────────────────────
           Expanded(
             child: state.messages.isEmpty
-                ? const _WelcomeView()
+                ? _WelcomeView(notice: state.errorMessage)
                 : ListView.builder(
                     controller: _scrollController,
                     padding: const EdgeInsets.symmetric(
@@ -114,7 +114,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           ),
 
           // ── Error ────────────────────────────────────────────────────────
-          if (state.errorMessage != null)
+          if (state.errorMessage != null && state.messages.isNotEmpty)
             Padding(
               padding:
                   const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -144,10 +144,13 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 // ── Widgets auxiliares ─────────────────────────────────────────────────────────
 
 class _WelcomeView extends StatelessWidget {
-  const _WelcomeView();
+  final String? notice;
+
+  const _WelcomeView({this.notice});
 
   @override
   Widget build(BuildContext context) {
+    final notice = this.notice;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
@@ -190,6 +193,18 @@ class _WelcomeView extends StatelessWidget {
                 height: 1.5,
               ),
             ),
+            if (notice != null) ...[
+              const SizedBox(height: 16),
+              Text(
+                notice,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: AppColors.error,
+                  fontSize: 14,
+                  height: 1.4,
+                ),
+              ),
+            ],
             const SizedBox(height: 24),
             const _SuggestionChips(),
           ],

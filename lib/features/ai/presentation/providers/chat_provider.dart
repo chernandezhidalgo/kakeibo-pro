@@ -1,9 +1,7 @@
-import 'dart:convert';
-
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:http/http.dart' as http;
 import 'package:uuid/uuid.dart';
 
+import 'package:kakeibo_pro/features/ai/data/services/gemini_service.dart';
 import 'package:kakeibo_pro/features/ai/domain/models/chat_message.dart';
 
 // ── Estado ────────────────────────────────────────────────────────────────────
@@ -35,9 +33,6 @@ class ChatState {
 // ── Notifier ──────────────────────────────────────────────────────────────────
 
 class ChatNotifier extends StateNotifier<ChatState> {
-  static const _apiUrl = 'https://api.anthropic.com/v1/messages';
-  static const _apiKey =
-      String.fromEnvironment('ANTHROPIC_API_KEY', defaultValue: '');
   static const _systemPrompt =
       'Eres Kakei, un asistente de finanzas personales que usa el método '
       'Kakeibo japonés. Ayudas a los usuarios a entender sus gastos, ahorrar '
@@ -47,11 +42,28 @@ class ChatNotifier extends StateNotifier<ChatState> {
       'consciencia, reflexión y metas de ahorro claras.';
 
   final _uuid = const Uuid();
+  final GeminiService _gemini;
 
-  ChatNotifier() : super(const ChatState());
+  ChatNotifier({GeminiService? gemini})
+      : _gemini = gemini ?? GeminiService(),
+        super(
+          GeminiService.hasApiKey
+              ? const ChatState()
+              : const ChatState(
+                  errorMessage: GeminiService.unavailableMessage,
+                ),
+        );
 
   Future<void> sendMessage(String text) async {
     if (text.trim().isEmpty) return;
+
+    if (!GeminiService.hasApiKey) {
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: GeminiService.unavailableMessage,
+      );
+      return;
+    }
 
     final userMsg = ChatMessage(
       id: _uuid.v4(),
@@ -66,39 +78,31 @@ class ChatNotifier extends StateNotifier<ChatState> {
     );
 
     try {
-      final history = state.messages.map((m) => m.toApiMap()).toList();
-
-      final response = await http.post(
-        Uri.parse(_apiUrl),
-        headers: {
-          'x-api-key': _apiKey,
-          'anthropic-version': '2023-06-01',
-          'content-type': 'application/json',
-        },
-        body: jsonEncode({
-          'model': 'claude-sonnet-4-6',
-          'max_tokens': 1024,
-          'system': _systemPrompt,
-          'messages': history,
-        }),
+      final reply = await _gemini.sendChat(
+        systemPrompt: _systemPrompt,
+        turns: [
+          for (final message in state.messages)
+            (
+              role: message.role == ChatRole.user ? 'user' : 'model',
+              text: message.content,
+            ),
+        ],
       );
-
-      if (response.statusCode != 200) {
-        throw Exception('API error ${response.statusCode}');
-      }
-
-      final body = jsonDecode(response.body) as Map<String, dynamic>;
-      final content = (body['content'] as List).first['text'] as String;
 
       final assistantMsg = ChatMessage(
         id: _uuid.v4(),
         role: ChatRole.assistant,
-        content: content,
+        content: reply,
       );
 
       state = state.copyWith(
         messages: [...state.messages, assistantMsg],
         isLoading: false,
+      );
+    } on KakeiUnavailableException catch (error) {
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: error.message,
       );
     } catch (e) {
       state = state.copyWith(
@@ -108,7 +112,11 @@ class ChatNotifier extends StateNotifier<ChatState> {
     }
   }
 
-  void clearHistory() => state = const ChatState();
+  void clearHistory() {
+    state = GeminiService.hasApiKey
+        ? const ChatState()
+        : const ChatState(errorMessage: GeminiService.unavailableMessage);
+  }
 }
 
 // ── Provider ──────────────────────────────────────────────────────────────────

@@ -1,8 +1,19 @@
 import 'dart:convert';
 
 import 'package:google_generative_ai/google_generative_ai.dart';
+import 'package:http/http.dart' as http;
 
 import 'package:kakeibo_pro/features/envelopes/domain/entities/envelope.dart';
+
+/// Kakei no debe llamar a la API. El mensaje es para la UI y no incluye la clave.
+class KakeiUnavailableException implements Exception {
+  final String message;
+
+  const KakeiUnavailableException(this.message);
+
+  @override
+  String toString() => message;
+}
 
 /// Resultado de categorización Kakeibo generado por Gemini.
 class GeminiCategorizationResult {
@@ -25,6 +36,22 @@ class GeminiService {
   static const _apiKey =
       String.fromEnvironment('GEMINI_API_KEY', defaultValue: '');
   static const _modelName = 'gemini-2.5-flash';
+
+  static const unavailableMessage =
+      'Kakei IA no está disponible en esta versión de prueba.';
+
+  static const unauthorizedMessage =
+      'Kakei IA no está disponible en esta versión de prueba.';
+
+  static bool get hasApiKey => _apiKey.isNotEmpty;
+
+  /// Mensaje de UI si no hay clave o si la API respondió 401/403.
+  /// Devuelve null para el resto de códigos. Nunca incluye la clave.
+  static String? friendlyChatError({required bool hasApiKey, int? statusCode}) {
+    if (!hasApiKey) return unavailableMessage;
+    if (statusCode == 401 || statusCode == 403) return unauthorizedMessage;
+    return null;
+  }
 
   static const _kakeiboCategories = {
     'supervivencia': KakeiboCategory.survival,
@@ -64,10 +91,107 @@ class GeminiService {
 
   void _checkApiKey() {
     if (_apiKey.isEmpty) {
-      throw Exception(
-        'GEMINI_API_KEY no configurada. Defínela con --dart-define al compilar.',
-      );
+      throw const KakeiUnavailableException(unavailableMessage);
     }
+  }
+
+  /// Conversación de Kakei. No llama a la red si la clave está vacía.
+  Future<String> sendChat({
+    required String systemPrompt,
+    required List<({String role, String text})> turns,
+  }) async {
+    final blocked = friendlyChatError(hasApiKey: hasApiKey);
+    if (blocked != null) {
+      throw const KakeiUnavailableException(unavailableMessage);
+    }
+
+    final response = await http.post(
+      Uri.parse(
+        'https://generativelanguage.googleapis.com/v1beta/models/$_modelName:generateContent',
+      ),
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': _apiKey,
+      },
+      body: jsonEncode({
+        'systemInstruction': {
+          'parts': [
+            {'text': systemPrompt},
+          ],
+        },
+        'contents': _contents(turns),
+        'generationConfig': {'maxOutputTokens': 1024},
+      }),
+    );
+
+    final friendly = friendlyChatError(
+      hasApiKey: true,
+      statusCode: response.statusCode,
+    );
+    if (friendly != null) {
+      throw KakeiUnavailableException(friendly);
+    }
+    if (response.statusCode != 200) {
+      throw Exception('API error ${response.statusCode}');
+    }
+
+    Object? decoded;
+    try {
+      decoded = jsonDecode(response.body);
+    } on FormatException {
+      throw Exception('Respuesta inesperada de Kakei IA');
+    }
+    return _extractReply(decoded);
+  }
+
+  List<Map<String, Object>> _contents(List<({String role, String text})> turns) {
+    final contents = <Map<String, Object>>[];
+    for (final turn in turns) {
+      final role = turn.role == 'model' ? 'model' : 'user';
+      if (contents.isNotEmpty && contents.last['role'] == role) {
+        final parts = contents.last['parts']! as List<Map<String, String>>;
+        final previous = parts.first['text'] ?? '';
+        parts[0] = {'text': '$previous\n${turn.text}'};
+        continue;
+      }
+      final parts = <Map<String, String>>[
+        {'text': turn.text},
+      ];
+      contents.add({
+        'role': role,
+        'parts': parts,
+      });
+    }
+    return contents;
+  }
+
+  String _extractReply(Object? decoded) {
+    if (decoded is! Map) {
+      throw Exception('Respuesta inesperada de Kakei IA');
+    }
+    final candidates = decoded['candidates'];
+    if (candidates is! List || candidates.isEmpty || candidates.first is! Map) {
+      throw Exception('Kakei IA no devolvió una respuesta');
+    }
+    final content = (candidates.first as Map)['content'];
+    if (content is! Map) {
+      throw Exception('Kakei IA no devolvió una respuesta');
+    }
+    final parts = content['parts'];
+    if (parts is! List) {
+      throw Exception('Kakei IA no devolvió una respuesta');
+    }
+    final buffer = StringBuffer();
+    for (final part in parts) {
+      if (part is Map && part['text'] is String) {
+        buffer.write(part['text'] as String);
+      }
+    }
+    final text = buffer.toString().trim();
+    if (text.isEmpty) {
+      throw Exception('Kakei IA no devolvió una respuesta');
+    }
+    return text;
   }
 
   /// Clasifica un gasto en una de las 4 categorías Kakeibo.
@@ -100,7 +224,9 @@ Responde ÚNICAMENTE con un objeto JSON con este formato exacto:
 }
 ''';
 
-    final response = await model.generateContent([Content.text(prompt)]);
+    final response = await _generate(
+      () => model.generateContent([Content.text(prompt)]),
+    );
     final text = response.text;
     if (text == null || text.trim().isEmpty) {
       throw Exception('Gemini no devolvió contenido para categorizar el gasto');
@@ -120,6 +246,30 @@ Responde ÚNICAMENTE con un objeto JSON con este formato exacto:
           ? 'Clasificado como ${_categoryLabels[category]}.'
           : reasoning,
     );
+  }
+
+  Future<T> _generate<T>(Future<T> Function() request) async {
+    _checkApiKey();
+    try {
+      return await request();
+    } on InvalidApiKey {
+      throw const KakeiUnavailableException(unauthorizedMessage);
+    } on GenerativeAIException catch (error) {
+      final friendly = friendlyChatError(
+        hasApiKey: true,
+        statusCode: _statusCodeIn(error.message),
+      );
+      if (friendly != null) {
+        throw KakeiUnavailableException(friendly);
+      }
+      rethrow;
+    }
+  }
+
+  static int? _statusCodeIn(String message) {
+    if (RegExp(r'(^|[^\d])401([^\d]|$)').hasMatch(message)) return 401;
+    if (RegExp(r'(^|[^\d])403([^\d]|$)').hasMatch(message)) return 403;
+    return null;
   }
 
   Map<String, dynamic> _extractJson(String text) {
